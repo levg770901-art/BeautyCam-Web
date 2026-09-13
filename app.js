@@ -30,27 +30,28 @@
 
   let stream = null;
   let sourceKind = null;
-  let originalPhoto = null;
   let previewFrame = 0;
   let lastFrameTime = 0;
-  let photoRenderTimer = 0;
-  let processedBlobUrl = null;
   let faceLandmarker = null;
   let faceInitPromise = null;
   let latestFaces = [];
   let lastFaceTime = -Infinity;
   let cameraFacing = "user";
   let mirrorPreview = true;
+  let lastProcessed = null;
 
   const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
   const LEFT_EYE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
   const RIGHT_EYE = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
   const MOUTH = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78];
+  const NOSE = [1,2,98,327,168,197,5,4,51,281];
 
-  function setStatus(text) { statusEl.textContent = text; }
+  function setStatus(text) { if (statusEl) statusEl.textContent = text; }
 
   function updateLabels() {
-    for (const key of Object.keys(sliders)) values[key].textContent = sliders[key].value;
+    for (const key of Object.keys(sliders)) {
+      if (values[key] && sliders[key]) values[key].textContent = sliders[key].value;
+    }
   }
 
   function setMirrorDisplay(enabled) {
@@ -82,14 +83,12 @@
     };
   }
 
-  // Face detection is optional for camera startup. The camera must never wait for this model.
   async function initFaceLandmarker() {
     if (faceLandmarker) return faceLandmarker;
     if (faceInitPromise) return faceInitPromise;
-
     faceInitPromise = (async () => {
       try {
-        setStatus("相機已開啟，正在載入多人臉美肌…");
+        setStatus("相機已開啟，正在載入自然多人臉美肌…");
         const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js");
         const resolver = await vision.FilesetResolver.forVisionTasks(VISION_WASM_URL);
         faceLandmarker = await vision.FaceLandmarker.createFromOptions(resolver, {
@@ -101,18 +100,17 @@
           minTrackingConfidence: 0.55,
           outputFaceBlendshapes: false
         });
-        if (sourceKind === "camera") setStatus("多人臉美肌已就緒");
+        if (sourceKind === "camera") setStatus("V1.3 自然美肌已就緒");
         return faceLandmarker;
       } catch (err) {
         console.error("Face Landmarker init failed", err);
         faceLandmarker = null;
-        if (sourceKind === "camera") setStatus("相機正常；臉部辨識未載入，暫用基礎美肌");
+        if (sourceKind === "camera") setStatus("相機正常；臉部辨識未載入，使用安全基礎美肌");
         return null;
       } finally {
         faceInitPromise = null;
       }
     })();
-
     return faceInitPromise;
   }
 
@@ -126,20 +124,6 @@
     }
   }
 
-  async function detectPhotoFaces(image) {
-    if (!faceLandmarker) return [];
-    try {
-      await faceLandmarker.setOptions({ runningMode: "IMAGE" });
-      const result = faceLandmarker.detect(image);
-      await faceLandmarker.setOptions({ runningMode: "VIDEO" });
-      return result?.faceLandmarks || [];
-    } catch (err) {
-      console.warn("Photo face detection failed", err);
-      try { await faceLandmarker.setOptions({ runningMode: "VIDEO" }); } catch (_) {}
-      return [];
-    }
-  }
-
   function pointInPolygon(x, y, poly) {
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -150,40 +134,42 @@
     return inside;
   }
 
-  function makeFaceMask(width, height, faces) {
-    const mask = new Uint8Array(width * height);
-    if (!faces?.length) return mask;
+  function drawPolygon(ctx, landmarks, indices, width, height, close = true) {
+    const poly = indices.map(i => landmarks[i]).filter(Boolean).map(p => [p.x * width, p.y * height]);
+    if (poly.length < 3) return poly;
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    if (close) ctx.closePath();
+    return poly;
+  }
 
-    const work = document.createElement("canvas");
-    work.width = width;
-    work.height = height;
-    const ctx = work.getContext("2d");
+  function rasterizeFaceMask(width, height, faces) {
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const ctx = maskCanvas.getContext("2d");
     ctx.fillStyle = "#fff";
-
-    for (const landmarks of faces) {
-      const oval = FACE_OVAL.map(i => landmarks[i]).filter(Boolean).map(p => [p.x * width, p.y * height]);
-      if (oval.length > 20) {
-        ctx.beginPath();
-        ctx.moveTo(oval[0][0], oval[0][1]);
-        for (let i = 1; i < oval.length; i++) ctx.lineTo(oval[i][0], oval[i][1]);
-        ctx.closePath();
-        ctx.fill();
-      }
+    for (const face of faces || []) {
+      const oval = drawPolygon(ctx, face, FACE_OVAL, width, height);
+      if (oval.length > 20) ctx.fill();
     }
 
-    const rgba = ctx.getImageData(0, 0, width, height).data;
-    for (let i = 0; i < mask.length; i++) mask[i] = rgba[i * 4] > 0 ? 255 : 0;
+    const image = ctx.getImageData(0, 0, width, height);
+    const mask = new Uint8Array(width * height);
+    for (let i = 0; i < mask.length; i++) mask[i] = image.data[i * 4] > 0 ? 255 : 0;
 
-    for (const landmarks of faces) {
-      for (const group of [LEFT_EYE, RIGHT_EYE, MOUTH]) {
-        const poly = group.map(i => landmarks[i]).filter(Boolean).map(p => [p.x * width, p.y * height]);
+    // Remove eyes, mouth, nostrils and a small amount around them so the feature edges remain crisp.
+    for (const face of faces || []) {
+      for (const group of [LEFT_EYE, RIGHT_EYE, MOUTH, NOSE]) {
+        const poly = group.map(i => face[i]).filter(Boolean).map(p => [p.x * width, p.y * height]);
         if (poly.length < 3) continue;
         const xs = poly.map(p => p[0]);
         const ys = poly.map(p => p[1]);
-        const minX = Math.max(0, Math.floor(Math.min(...xs)));
-        const maxX = Math.min(width - 1, Math.ceil(Math.max(...xs)));
-        const minY = Math.max(0, Math.floor(Math.min(...ys)));
-        const maxY = Math.min(height - 1, Math.ceil(Math.max(...ys)));
+        const minX = Math.max(0, Math.floor(Math.min(...xs) - 3));
+        const maxX = Math.min(width - 1, Math.ceil(Math.max(...xs) + 3));
+        const minY = Math.max(0, Math.floor(Math.min(...ys) - 3));
+        const maxY = Math.min(height - 1, Math.ceil(Math.max(...ys) + 3));
         for (let y = minY; y <= maxY; y++) {
           for (let x = minX; x <= maxX; x++) {
             if (pointInPolygon(x + 0.5, y + 0.5, poly)) mask[y * width + x] = 0;
@@ -194,65 +180,143 @@
     return mask;
   }
 
-  function processImage(source, width, height, maxSide, faces = latestFaces) {
+  function makeFeatheredMask(mask, width, height, radius = 5) {
+    const c = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(width, height) : document.createElement("canvas");
+    c.width = width;
+    c.height = height;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    const img = new ImageData(new Uint8ClampedArray(width * height * 4), width, height);
+    for (let i = 0, p = 0; i < mask.length; i++, p += 4) img.data[p] = img.data[p + 1] = img.data[p + 2] = mask[i]; img.data[p + 3] = 255;
+    ctx.putImageData(img, 0, 0);
+    const blur = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(width, height) : document.createElement("canvas");
+    blur.width = width;
+    blur.height = height;
+    const bctx = blur.getContext("2d", { willReadFrequently: true });
+    bctx.filter = `blur(${radius}px)`;
+    bctx.drawImage(c, 0, 0);
+    bctx.filter = "none";
+    const out = bctx.getImageData(0, 0, width, height).data;
+    return out;
+  }
+
+  function makeFeatureMask(width, height, faces) {
+    const c = document.createElement("canvas");
+    c.width = width; c.height = height;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff";
+    for (const face of faces || []) {
+      for (const group of [LEFT_EYE, RIGHT_EYE, MOUTH]) {
+        const poly = drawPolygon(ctx, face, group, width, height);
+        if (poly.length >= 3) ctx.fill();
+      }
+    }
+    return ctx.getImageData(0, 0, width, height).data;
+  }
+
+  function makeBlurred(source, width, height, radius) {
+    const c = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(width, height) : document.createElement("canvas");
+    c.width = width; c.height = height;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.filter = `blur(${Math.max(0.5, radius)}px)`;
+    ctx.drawImage(source, 0, 0, width, height);
+    ctx.filter = "none";
+    return ctx.getImageData(0, 0, width, height).data;
+  }
+
+  function skinProbability(r, g, b, y, chroma) {
+    // Broad skin gate rather than a single RGB rule. It remains deliberately conservative.
+    const warm = r > g * 0.88 && g > b * 0.76;
+    const hueLike = r > b * 1.18 && g > b * 1.05;
+    const validLuma = y > 25 && y < 248;
+    if (!warm || !hueLike || !validLuma || chroma < 6) return 0;
+    const redness = Math.max(0, r - g);
+    const yellow = Math.max(0, g - b);
+    const score = Math.min(1, (redness / 75) * 0.45 + (yellow / 85) * 0.35 + Math.min(1, chroma / 55) * 0.20);
+    return Math.max(0, Math.min(1, score));
+  }
+
+  function processImage(source, width, height, maxSide, faces = latestFaces, captureMode = false) {
     const size = fitSize(width, height, maxSide);
     canvas.width = size.width;
     canvas.height = size.height;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(source, 0, 0, size.width, size.height);
     const base = ctx.getImageData(0, 0, size.width, size.height);
+    const out = new Uint8ClampedArray(base.data);
     const p = params();
-    const faceMask = makeFaceMask(size.width, size.height, faces);
-    const hasFaceMask = faces?.length > 0;
+    const faceList = Array.isArray(faces) ? faces : [];
+    const faceMask = rasterizeFaceMask(size.width, size.height, faceList);
+    const hasFaces = faceList.length > 0;
 
-    if (p.smooth === 0 && p.soften === 0 && p.whiten === 0) return base;
+    const blurRadius = 1.2 + 3.2 * p.smooth + 2.0 * p.soften;
+    const blurred = (p.smooth > 0 || p.soften > 0) ? makeBlurred(source, size.width, size.height, blurRadius) : base.data;
+    const featureMask = makeFeatureMask(size.width, size.height, faceList);
+    const feather = makeFeatheredMask(faceMask, size.width, size.height, Math.max(2, Math.round(size.width / 320)));
+    const detailBlur = (p.smooth > 0 || p.soften > 0) ? makeBlurred(source, size.width, size.height, 0.8) : base.data;
 
-    const blurCanvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(size.width, size.height) : document.createElement("canvas");
-    blurCanvas.width = size.width;
-    blurCanvas.height = size.height;
-    const bctx = blurCanvas.getContext("2d", { willReadFrequently: true });
-    bctx.drawImage(source, 0, 0, size.width, size.height);
+    // Group portraits are intentionally softened: strong beauty on every face looks artificial.
+    const groupFactor = faceList.length >= 3 ? 0.78 : faceList.length === 2 ? 0.90 : 1;
+    const smoothingStrength = Math.min(0.34, (p.smooth * 0.25 + p.soften * 0.30) * groupFactor);
 
-    const copy = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(size.width, size.height) : document.createElement("canvas");
-    copy.width = size.width;
-    copy.height = size.height;
-    copy.getContext("2d").drawImage(blurCanvas, 0, 0);
-    bctx.clearRect(0, 0, size.width, size.height);
-    bctx.filter = `blur(${1 + Math.round(4 * p.smooth + 2 * p.soften)}px)`;
-    bctx.drawImage(copy, 0, 0);
-    bctx.filter = "none";
-
-    const blurred = bctx.getImageData(0, 0, size.width, size.height).data;
-    const out = base.data;
     for (let i = 0, px = 0; i < out.length; i += 4, px++) {
-      const r = out[i], g = out[i + 1], b = out[i + 2];
+      const r = base.data[i], g = base.data[i + 1], b = base.data[i + 2];
       const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const maxc = Math.max(r, g, b);
       const minc = Math.min(r, g, b);
       const chroma = maxc - minc;
-      const warm = r >= g * 0.82 && g >= b * 0.72;
-      const colorSkin = warm && chroma > 8 && y > 28 && y < 248;
-      const faceAllowed = hasFaceMask ? faceMask[px] > 0 : true;
-      const skinGate = faceAllowed && colorSkin;
+      const skinScore = skinProbability(r, g, b, y, chroma);
+      const faceAlpha = hasFaces ? feather[px * 4] / 255 : 1;
+      const skinGate = Math.min(1, skinScore * faceAlpha);
 
-      if (skinGate) {
-        const strength = Math.min(0.40, p.smooth * 0.28 + p.soften * 0.32);
-        const edge = Math.min(1, (Math.abs(r - g) + Math.abs(g - b) + Math.abs(r - b)) / 120);
-        const blend = strength * (1 - 0.55 * edge);
-        out[i] = Math.round(r + (blurred[i] - r) * blend);
-        out[i + 1] = Math.round(g + (blurred[i + 1] - g) * blend);
-        out[i + 2] = Math.round(b + (blurred[i + 2] - b) * blend);
+      if (skinGate > 0.04 && smoothingStrength > 0) {
+        // Edge protection uses the difference between the original and low-frequency image.
+        const br = blurred[i], bg = blurred[i + 1], bb = blurred[i + 2];
+        const detail = Math.min(1, (Math.abs(r - br) + Math.abs(g - bg) + Math.abs(b - bb)) / 90);
+        const edgeProtection = 1 - 0.72 * detail;
+        const blend = smoothingStrength * skinGate * Math.max(0.18, edgeProtection);
+        out[i] = Math.round(r + (br - r) * blend);
+        out[i + 1] = Math.round(g + (bg - g) * blend);
+        out[i + 2] = Math.round(b + (bb - b) * blend);
       }
 
-      if (p.whiten > 0) {
-        const headroom = Math.max(0, 245 - y) / 217;
-        const lift = p.whiten * 14 * headroom * (skinGate ? 1 : 0.08);
-        out[i] = Math.min(255, Math.round(out[i] + lift * 0.96));
-        out[i + 1] = Math.min(255, Math.round(out[i + 1] + lift));
-        out[i + 2] = Math.min(255, Math.round(out[i + 2] + lift * 0.98));
+      if (skinGate > 0.04) {
+        let rr = out[i], gg = out[i + 1], bb2 = out[i + 2];
+        const yy = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb2;
+        // Natural tone balancing: gently reduce excessive redness and compress local shadows.
+        const redness = Math.max(0, rr - gg);
+        const redCorrection = Math.min(0.10, redness / 170) * skinGate;
+        rr -= redCorrection * 10;
+        const shadow = Math.max(0, 145 - yy) / 145;
+        const lightLift = shadow * 5.5 * skinGate;
+        rr += lightLift * 0.95;
+        gg += lightLift;
+        bb2 += lightLift * 0.98;
+
+        // Luminance-based whitening with highlight protection.
+        if (p.whiten > 0) {
+          const headroom = Math.max(0, 247 - yy) / 205;
+          const lift = p.whiten * 12.5 * headroom * skinGate;
+          rr += lift * 0.97;
+          gg += lift;
+          bb2 += lift * 0.99;
+        }
+        out[i] = Math.min(255, Math.max(0, Math.round(rr)));
+        out[i + 1] = Math.min(255, Math.max(0, Math.round(gg)));
+        out[i + 2] = Math.min(255, Math.max(0, Math.round(bb2)));
+      }
+
+      // Restore a small amount of high-frequency detail in facial features only.
+      const feature = featureMask[px * 4] / 255;
+      if (feature > 0 && (p.smooth > 0 || p.soften > 0)) {
+        const amount = (captureMode ? 0.30 : 0.22) * feature;
+        out[i] = Math.min(255, Math.max(0, Math.round(out[i] + (out[i] - detailBlur[i]) * amount)));
+        out[i + 1] = Math.min(255, Math.max(0, Math.round(out[i + 1] + (out[i + 1] - detailBlur[i + 1]) * amount)));
+        out[i + 2] = Math.min(255, Math.max(0, Math.round(out[i + 2] + (out[i + 2] - detailBlur[i + 2]) * amount)));
       }
     }
-    return new ImageData(out, size.width, size.height);
+
+    lastProcessed = new ImageData(out, size.width, size.height);
+    return lastProcessed;
   }
 
   function showProcessed(data, mirror = false) {
@@ -268,44 +332,22 @@
   function flipCanvasPixels() {
     if (!canvas.width || !canvas.height) return;
     const temp = document.createElement("canvas");
-    temp.width = canvas.width;
-    temp.height = canvas.height;
+    temp.width = canvas.width; temp.height = canvas.height;
     const ctx = temp.getContext("2d");
-    ctx.translate(temp.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(canvas, 0, 0);
+    ctx.translate(temp.width, 0); ctx.scale(-1, 1); ctx.drawImage(canvas, 0, 0);
     const out = canvas.getContext("2d");
     out.setTransform(1, 0, 0, 1, 0, 0);
     out.clearRect(0, 0, canvas.width, canvas.height);
     out.drawImage(temp, 0, 0);
   }
 
-  function schedulePhotoRender() {
-    if (sourceKind !== "photo" || !originalPhoto) return;
-    clearTimeout(photoRenderTimer);
-    photoRenderTimer = setTimeout(() => {
-      showProcessed(processImage(originalPhoto, originalPhoto.naturalWidth, originalPhoto.naturalHeight, MAX_PHOTO_SIZE, latestFaces), false);
-      downloadBtn.disabled = false;
-      setStatus("照片效果已更新");
-    }, 50);
-  }
-
   async function openCameraStream() {
-    const preferred = {
-      audio: false,
-      video: {
-        facingMode: { ideal: cameraFacing },
-        width: { ideal: 1280 },
-        height: { ideal: 960 }
-      }
-    };
-    try {
-      return await navigator.mediaDevices.getUserMedia(preferred);
-    } catch (firstErr) {
+    const preferred = { audio: false, video: { facingMode: { ideal: cameraFacing }, width: { ideal: 1280 }, height: { ideal: 960 } } };
+    try { return await navigator.mediaDevices.getUserMedia(preferred); }
+    catch (firstErr) {
       console.warn("Preferred camera constraints failed", firstErr);
-      try {
-        return await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cameraFacing } });
-      } catch (secondErr) {
+      try { return await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cameraFacing } }); }
+      catch (secondErr) {
         console.warn("Facing-mode fallback failed", secondErr);
         return await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
       }
@@ -314,13 +356,8 @@
 
   async function startCamera() {
     releaseCamera();
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setStatus("目前環境不支援相機，請使用 HTTPS 網頁");
-      return;
-    }
-
+    if (!navigator.mediaDevices?.getUserMedia) { setStatus("目前環境不支援相機，請使用 HTTPS 網頁"); return; }
     try {
-      // Critical fix: request the camera FIRST. Face Landmarker loads in the background.
       stream = await openCameraStream();
       video.srcObject = stream;
       await video.play();
@@ -335,25 +372,17 @@
       canvas.style.display = "block";
       video.style.display = "none";
       placeholder.style.display = "none";
-      setStatus(`已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭，正在啟動美肌`);
+      setStatus(`已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭，V1.3 自然美肌啟動中`);
       startPreviewLoop();
-
-      // Do not block camera operation on CDN/WASM/model/GPU initialization.
       initFaceLandmarker();
     } catch (err) {
       console.error("Camera start failed", err);
       releaseCamera();
-      switchCameraBtn.disabled = true;
-      captureBtn.disabled = true;
-      if (err?.name === "NotAllowedError") {
-        setStatus("相機權限被拒絕，請允許此網站使用相機");
-      } else if (err?.name === "NotFoundError") {
-        setStatus("找不到可用的相機");
-      } else if (err?.name === "NotReadableError") {
-        setStatus("相機目前被其他程式占用");
-      } else {
-        setStatus("無法開啟相機，請確認 Safari 的相機權限");
-      }
+      switchCameraBtn.disabled = true; captureBtn.disabled = true;
+      if (err?.name === "NotAllowedError") setStatus("相機權限被拒絕，請允許此網站使用相機");
+      else if (err?.name === "NotFoundError") setStatus("找不到可用的相機");
+      else if (err?.name === "NotReadableError") setStatus("相機目前被其他程式占用");
+      else setStatus("無法開啟相機，請確認 Safari 的相機權限");
     }
   }
 
@@ -372,73 +401,35 @@
       lastFrameTime = time;
       if (video.videoWidth && video.videoHeight) {
         updateFaces(video, time);
-        showProcessed(processImage(video, video.videoWidth, video.videoHeight, CAMERA_PROCESS_SIZE, latestFaces), mirrorPreview);
+        showProcessed(processImage(video, video.videoWidth, video.videoHeight, CAMERA_PROCESS_SIZE, latestFaces, false), mirrorPreview);
       }
     };
     previewFrame = requestAnimationFrame(loop);
   }
 
-  async function loadPhoto(file) {
-    releaseCamera();
-    switchCameraBtn.disabled = true;
-    if (!file.type.startsWith("image/")) throw new Error("Not an image");
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.decoding = "async";
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = url;
-    });
-    if (originalPhoto?.src?.startsWith("blob:")) URL.revokeObjectURL(originalPhoto.src);
-    originalPhoto = img;
-    sourceKind = "photo";
-    captureBtn.disabled = true;
-    mirrorPreview = false;
-    setMirrorDisplay(false);
-    latestFaces = await detectPhotoFaces(img);
-    showProcessed(processImage(img, img.naturalWidth, img.naturalHeight, MAX_PHOTO_SIZE, latestFaces), false);
-    downloadBtn.disabled = false;
-    setStatus(`照片已處理（最長邊上限 ${MAX_PHOTO_SIZE}px）${latestFaces.length ? `，偵測到 ${latestFaces.length} 張臉` : ""}`);
-  }
-
-  function capturePhoto() {
+  async function capturePhoto() {
     if (sourceKind !== "camera" || !video.videoWidth) return;
+    // Stop the preview loop before the high-quality render so the capture is stable.
+    if (previewFrame) cancelAnimationFrame(previewFrame);
+    previewFrame = 0;
     const shouldMirror = cameraFacing === "user";
-    showProcessed(processImage(video, video.videoWidth, video.videoHeight, MAX_PHOTO_SIZE, latestFaces), false);
-    // Front-camera saved image follows the mirrored selfie preview; rear camera stays normal.
+    const data = processImage(video, video.videoWidth, video.videoHeight, MAX_PHOTO_SIZE, latestFaces, true);
+    showProcessed(data, false);
     if (shouldMirror) flipCanvasPixels();
     canvas.style.transform = "none";
     downloadBtn.disabled = false;
-    setStatus("照片已完成多人臉美肌");
+    setStatus(`拍照完成：${latestFaces.length ? `偵測 ${latestFaces.length} 張臉，` : ""}已使用高品質 V1.3 處理`);
     releaseCamera();
     sourceKind = "photo-capture";
     switchCameraBtn.disabled = true;
     startCameraBtn.textContent = "開啟前鏡頭";
   }
 
-  async function downloadPhoto() {
-    if (!canvas.width || !canvas.height) return;
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.94));
-    if (!blob) return;
-    if (processedBlobUrl) URL.revokeObjectURL(processedBlobUrl);
-    processedBlobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = processedBlobUrl;
-    a.download = `BeautyCam-${new Date().toISOString().replace(/[:.]/g, "-")}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setStatus("照片已儲存");
-  }
-
   function reset() {
     releaseCamera();
-    clearTimeout(photoRenderTimer);
-    if (originalPhoto?.src?.startsWith("blob:")) URL.revokeObjectURL(originalPhoto.src);
-    originalPhoto = null;
-    sourceKind = null;
     latestFaces = [];
+    sourceKind = null;
+    lastProcessed = null;
     canvas.style.display = "none";
     canvas.style.transform = "none";
     video.style.display = "none";
@@ -452,21 +443,15 @@
     setStatus("已重設");
   }
 
+  // The upload input remains hidden only for compatibility with the existing DOM contract.
+  // There is deliberately no public photo-library/upload entry in V1.3.
+  if (fileInput) fileInput.addEventListener("change", () => { fileInput.value = ""; });
   startCameraBtn.addEventListener("click", startCamera);
   switchCameraBtn.addEventListener("click", switchCamera);
   captureBtn.addEventListener("click", capturePhoto);
-  downloadBtn.addEventListener("click", downloadPhoto);
   resetBtn.addEventListener("click", reset);
-  fileInput.addEventListener("change", async e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try { await loadPhoto(file); }
-    catch (err) { console.error(err); setStatus("照片載入失敗"); }
-    finally { fileInput.value = ""; }
-  });
   Object.values(sliders).forEach(slider => slider.addEventListener("input", () => {
     updateLabels();
-    schedulePhotoRender();
   }));
 
   window.addEventListener("pagehide", releaseCamera);
