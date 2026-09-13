@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111">
+  <title>BeautyCam Web V1.1</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>BeautyCam</h1>
+        <p>自然美肌・磨皮・美白</p>
+      </div>
+      <span class="version">V1.1</span>
+    </header>
+
+    <section class="stage" aria-label="相機預覽">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="previewCanvas" aria-hidden="true"></canvas>
+      <img id="photoPreview" alt="照片預覽">
+      <div id="placeholder" class="placeholder">開啟相機或上傳照片</div>
+    </section>
+
+    <section class="controls">
+      <div class="control-row">
+        <label for="smooth">美肌 <output id="smoothValue">30</output></label>
+        <input id="smooth" type="range" min="0" max="100" value="30">
+      </div>
+      <div class="control-row">
+        <label for="soften">磨皮 <output id="softenValue">15</output></label>
+        <input id="soften" type="range" min="0" max="100" value="15">
+      </div>
+      <div class="control-row">
+        <label for="whiten">美白 <output id="whitenValue">10</output></label>
+        <input id="whiten" type="range" min="0" max="100" value="10">
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="startCamera" class="secondary">開啟相機</button>
+      <label class="upload secondary">
+        上傳照片
+        <input id="fileInput" type="file" accept="image/*">
+      </label>
+      <button id="capture" class="primary" disabled>拍照</button>
+      <button id="download" class="secondary" disabled>儲存照片</button>
+      <button id="reset" class="secondary">重設</button>
+    </section>
+
+    <p id="status" class="status" role="status">就緒</p>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
