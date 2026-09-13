@@ -96,7 +96,7 @@
           minTrackingConfidence: 0.55,
           outputFaceBlendshapes: false
         });
-        if (sourceKind === "camera") setStatus("V1.3 自然美肌已就緒");
+        if (sourceKind === "camera") setStatus("V1.4 自然美肌已就緒");
         return faceLandmarker;
       } catch (err) {
         console.error("Face Landmarker init failed", err);
@@ -205,12 +205,20 @@
   }
 
   function skinProbability(r, g, b, y, chroma) {
-    const warm = r > g * 0.88 && g > b * 0.76;
-    const hueLike = r > b * 1.18 && g > b * 1.05;
-    if (!warm || !hueLike || y <= 25 || y >= 248 || chroma < 6) return 0;
+    if (y <= 22 || y >= 252 || chroma < 3) return 0;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const warm = r >= g * 0.84 && g >= b * 0.72;
+    const rose = r > g && g >= b * 0.90;
+    const yellow = g >= b * 1.08;
+    const neutral = chroma < 24 && r >= g * 0.94 && g >= b * 0.90;
+    if (!warm || (!rose && !yellow && !neutral)) return 0;
     const redness = Math.max(0, r - g);
-    const yellow = Math.max(0, g - b);
-    return Math.max(0, Math.min(1, (redness / 75) * 0.45 + (yellow / 85) * 0.35 + Math.min(1, chroma / 55) * 0.20));
+    const yellowness = Math.max(0, g - b);
+    const saturation = Math.min(1, chroma / 50);
+    const skinHue = Math.max(0, Math.min(1, (redness / 78) * 0.42 + (yellowness / 92) * 0.38 + saturation * 0.20));
+    const midtone = 1 - Math.min(1, Math.abs(y - 150) / 125) * 0.30;
+    const paleSkin = neutral ? 0.72 : 1;
+    return Math.max(0.08, Math.min(1, skinHue * midtone * paleSkin + (neutral ? 0.16 : 0)));
   }
 
   function processImage(source, width, height, maxSide, faces = latestFaces, captureMode = false) {
@@ -227,13 +235,15 @@
     const beautyActive = p.smooth > 0 || p.soften > 0 || p.whiten > 0;
     if (!beautyActive) return new ImageData(out, size.width, size.height);
 
-    const blurRadius = 1.2 + 3.2 * p.smooth + 2.0 * p.soften;
+    const blurRadius = 1.8 + 4.2 * p.smooth + 2.8 * p.soften;
     const blurred = makeBlurred(source, size.width, size.height, blurRadius);
     const featureMask = makeFeatureMask(size.width, size.height, faceList);
-    const feather = makeFeatheredMask(faceMask, size.width, size.height, Math.max(2, Math.round(size.width / 320)));
-    const detailBlur = makeBlurred(source, size.width, size.height, 0.8);
-    const groupFactor = faceList.length >= 3 ? 0.78 : faceList.length === 2 ? 0.90 : 1;
-    const smoothingStrength = Math.min(0.34, (p.smooth * 0.25 + p.soften * 0.30) * groupFactor);
+    const feather = makeFeatheredMask(faceMask, size.width, size.height, Math.max(3, Math.round(size.width / 250)));
+    const detailBlur = makeBlurred(source, size.width, size.height, 0.75);
+    const glowBlur = makeBlurred(source, size.width, size.height, 9 + 8 * p.soften);
+    const groupFactor = faceList.length >= 3 ? 0.84 : faceList.length === 2 ? 0.94 : 1;
+    const smoothingStrength = Math.min(0.48, (p.smooth * 0.38 + p.soften * 0.42) * groupFactor);
+    const captureBoost = captureMode ? 1.08 : 1;
 
     for (let i = 0, px = 0; i < out.length; i += 4, px++) {
       const r = base.data[i], g = base.data[i + 1], b = base.data[i + 2];
@@ -243,29 +253,56 @@
       const faceAlpha = hasFaces ? feather[px * 4] / 255 : 1;
       const skinGate = Math.min(1, skinScore * faceAlpha);
 
-      if (skinGate > 0.04 && smoothingStrength > 0) {
+      if (skinGate > 0.035 && smoothingStrength > 0) {
         const br = blurred[i], bg = blurred[i + 1], bb = blurred[i + 2];
-        const detail = Math.min(1, (Math.abs(r - br) + Math.abs(g - bg) + Math.abs(b - bb)) / 90);
-        const edgeProtection = 1 - 0.72 * detail;
-        const blend = smoothingStrength * skinGate * Math.max(0.18, edgeProtection);
+        const detail = Math.min(1, (Math.abs(r - br) + Math.abs(g - bg) + Math.abs(b - bb)) / 105);
+        const edgeProtection = 1 - 0.58 * detail;
+        const blend = Math.min(0.50, smoothingStrength * skinGate * Math.max(0.28, edgeProtection) * captureBoost);
         out[i] = Math.round(r + (br - r) * blend);
         out[i + 1] = Math.round(g + (bg - g) * blend);
         out[i + 2] = Math.round(b + (bb - b) * blend);
       }
 
-      if (skinGate > 0.04) {
+      if (skinGate > 0.035) {
         let rr = out[i], gg = out[i + 1], bb2 = out[i + 2];
         const yy = 0.2126 * rr + 0.7152 * gg + 0.0722 * bb2;
         const redness = Math.max(0, rr - gg);
-        rr -= Math.min(0.10, redness / 170) * skinGate * 10;
-        const shadow = Math.max(0, 145 - yy) / 145;
-        const lightLift = shadow * 5.5 * skinGate;
-        rr += lightLift * 0.95; gg += lightLift; bb2 += lightLift * 0.98;
+        const redControl = Math.min(4.5, redness * 0.055) * skinGate * (0.55 + p.soften * 0.45);
+        rr -= redControl;
+        gg += redControl * 0.16;
+
+        const shadow = Math.max(0, 158 - yy) / 158;
+        const softLight = shadow * (4.2 + 4.0 * p.soften) * skinGate;
+        rr += softLight * 0.96;
+        gg += softLight;
+        bb2 += softLight * 0.98;
+
         if (p.whiten > 0) {
-          const headroom = Math.max(0, 247 - yy) / 205;
-          const lift = p.whiten * 12.5 * headroom * skinGate;
-          rr += lift * 0.97; gg += lift; bb2 += lift * 0.99;
+          const headroom = Math.max(0, 250 - yy) / 205;
+          const lift = p.whiten * (20 + 10 * p.soften) * headroom * skinGate;
+          rr += lift * 0.965;
+          gg += lift;
+          bb2 += lift * 0.985;
         }
+
+        // Local portrait glow: brighten the low-frequency skin light without washing out highlights.
+        if (p.soften > 0.04) {
+          const glowR = glowBlur[i], glowG = glowBlur[i + 1], glowB = glowBlur[i + 2];
+          const glowY = 0.2126 * glowR + 0.7152 * glowG + 0.0722 * glowB;
+          const lowFreqLift = Math.max(0, Math.min(1, (glowY - 92) / 145));
+          const glow = p.soften * 5.2 * lowFreqLift * skinGate;
+          rr += glow * 0.97;
+          gg += glow;
+          bb2 += glow * 0.99;
+        }
+
+        // Very mild saturation recovery keeps skin from looking grey after smoothing.
+        const avg = (rr + gg + bb2) / 3;
+        const sat = 1 + p.smooth * 0.035;
+        rr = avg + (rr - avg) * sat;
+        gg = avg + (gg - avg) * sat;
+        bb2 = avg + (bb2 - avg) * sat;
+
         out[i] = Math.min(255, Math.max(0, Math.round(rr)));
         out[i + 1] = Math.min(255, Math.max(0, Math.round(gg)));
         out[i + 2] = Math.min(255, Math.max(0, Math.round(bb2)));
@@ -273,12 +310,26 @@
 
       const feature = featureMask[px * 4] / 255;
       if (feature > 0) {
-        const amount = (captureMode ? 0.30 : 0.22) * feature;
+        const amount = (captureMode ? 0.34 : 0.26) * feature;
         out[i] = Math.min(255, Math.max(0, Math.round(out[i] + (out[i] - detailBlur[i]) * amount)));
         out[i + 1] = Math.min(255, Math.max(0, Math.round(out[i + 1] + (out[i + 1] - detailBlur[i + 1]) * amount)));
         out[i + 2] = Math.min(255, Math.max(0, Math.round(out[i + 2] + (out[i + 2] - detailBlur[i + 2]) * amount)));
       }
     }
+
+    // Subtle whole-image tonal finish, intentionally tiny so background character remains intact.
+    const tone = Math.min(1, p.whiten * 0.10 + p.soften * 0.035);
+    if (tone > 0) {
+      for (let i = 0; i < out.length; i += 4) {
+        const y = 0.2126 * out[i] + 0.7152 * out[i + 1] + 0.0722 * out[i + 2];
+        const headroom = Math.max(0, 252 - y) / 252;
+        const lift = tone * 2.4 * headroom;
+        out[i] = Math.min(255, Math.round(out[i] + lift * 0.98));
+        out[i + 1] = Math.min(255, Math.round(out[i + 1] + lift));
+        out[i + 2] = Math.min(255, Math.round(out[i + 2] + lift * 0.99));
+      }
+    }
+
     return new ImageData(out, size.width, size.height);
   }
 
@@ -320,7 +371,7 @@
       startCameraBtn.textContent = cameraFacing === "user" ? "前鏡頭已開啟" : "後鏡頭已開啟";
       mirrorPreview = cameraFacing === "user"; setMirrorDisplay(mirrorPreview);
       canvas.style.display = "block"; video.style.display = "none"; placeholder.style.display = "none";
-      setStatus(`已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭，V1.3 自然美肌啟動中`);
+      setStatus(`已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭，V1.4 自然美肌啟動中`);
       startPreviewLoop(); initFaceLandmarker();
     } catch (err) {
       console.error("Camera start failed", err); releaseCamera(); switchCameraBtn.disabled = true; captureBtn.disabled = true;
@@ -361,7 +412,7 @@
     showProcessed(data, false);
     if (shouldMirror) flipCanvasPixels();
     canvas.style.transform = "none"; downloadBtn.disabled = false;
-    setStatus(`拍照完成：${latestFaces.length ? `偵測 ${latestFaces.length} 張臉，` : ""}已使用高品質 V1.3 處理`);
+    setStatus(`拍照完成：${latestFaces.length ? `偵測 ${latestFaces.length} 張臉，` : ""}已使用高品質 V1.4 處理`);
     releaseCamera(); sourceKind = "photo-capture"; switchCameraBtn.disabled = true; startCameraBtn.textContent = "開啟前鏡頭";
   }
 
