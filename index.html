@@ -21,7 +21,7 @@
       <video id="video" autoplay playsinline muted></video>
       <canvas id="previewCanvas" aria-hidden="true"></canvas>
       <img id="photoPreview" alt="照片預覽">
-      <div id="placeholder" class="placeholder">開啟相機或上傳照片</div>
+      <div id="placeholder" class="placeholder">選擇鏡頭後拍照</div>
     </section>
 
     <section class="controls">
@@ -40,10 +40,6 @@
     </section>
 
     <section class="actions">
-      <label id="uploadControl" class="upload secondary">
-        上傳照片
-        <input id="fileInput" type="file" accept="image/*">
-      </label>
       <button id="startCamera" class="secondary">開啟前鏡頭</button>
       <button id="switchCamera" class="secondary" disabled>切換後鏡頭</button>
       <button id="capture" class="primary" disabled>拍照</button>
@@ -51,10 +47,11 @@
       <button id="reset" class="secondary">重設</button>
     </section>
 
-    <p id="status" class="status" role="status">就緒</p>
+    <!-- 保留隱藏 input 供既有程式相容，但不提供任何上傳入口；不會出現照片圖庫／拍照／選擇檔案選單。 -->
+    <input id="fileInput" type="file" accept="image/*" hidden>
+    <p id="status" class="status" role="status">請先選擇鏡頭</p>
   </main>
   <script src="app.js"></script>
   <script src="save-handler.js"></script>
-  <script src="capture-ui.js"></script>
 </body>
 </html>
