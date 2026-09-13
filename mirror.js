@@ -33,16 +33,16 @@
     out.drawImage(temp, 0, 0);
   }
 
-  // Capture handler in app.js writes the processed, unmirrored frame first.
-  // Read the current preview transform before that handler runs, then restore
-  // the same visual orientation after capture.
+  // Capture in capture-phase so we read the preview mirror state BEFORE app.js
+  // replaces the canvas with the high-resolution capture frame.
   captureBtn.addEventListener("click", () => {
     const shouldMirror = canvas.style.transform === "scaleX(-1)";
     canvas.dataset.captureMirror = shouldMirror ? "1" : "0";
+    delete canvas.dataset.pixelsMirrored;
     requestAnimationFrame(() => {
       canvas.style.transform = shouldMirror ? "scaleX(-1)" : "none";
     });
-  });
+  }, true);
 
   // Run before app.js's download handler so the JPEG itself is mirrored.
   downloadBtn.addEventListener("click", () => {
