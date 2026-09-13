@@ -4,41 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#111">
-  <title>BeautyCam Web V1.4</title>
+  <title>BeautyCam Web V1.5</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="app">
     <header class="topbar">
-      <div>
-        <h1>BeautyCam</h1>
-        <p>Natural Beauty Engine</p>
-      </div>
-      <span class="version">V1.4</span>
+      <div><h1>BeautyCam</h1><p>Natural Beauty Engine</p></div>
+      <span class="version">V1.5</span>
     </header>
-
     <section class="stage" aria-label="相機預覽">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="previewCanvas" aria-hidden="true"></canvas>
       <img id="photoPreview" alt="照片預覽">
       <div id="placeholder" class="placeholder">選擇鏡頭後拍照</div>
     </section>
-
     <section class="controls">
-      <div class="control-row">
-        <label for="smooth">美肌 <output id="smoothValue">42</output></label>
-        <input id="smooth" type="range" min="0" max="100" value="42">
-      </div>
-      <div class="control-row">
-        <label for="soften">磨皮 <output id="softenValue">25</output></label>
-        <input id="soften" type="range" min="0" max="100" value="25">
-      </div>
-      <div class="control-row">
-        <label for="whiten">美白 <output id="whitenValue">14</output></label>
-        <input id="whiten" type="range" min="0" max="100" value="14">
+      <div class="control-row"><label for="smooth">美肌 <output id="smoothValue">42</output></label><input id="smooth" type="range" min="0" max="100" value="42"></div>
+      <div class="control-row"><label for="soften">磨皮 <output id="softenValue">25</output></label><input id="soften" type="range" min="0" max="100" value="25"></div>
+      <div class="control-row"><label for="whiten">美白 <output id="whitenValue">14</output></label><input id="whiten" type="range" min="0" max="100" value="14"></div>
+      <div class="control-row"><label for="makeup">彩妝 <output id="makeupValue">0</output></label><input id="makeup" type="range" min="0" max="100" value="0"></div>
+      <div class="makeup-presets" aria-label="彩妝風格">
+        <button type="button" class="makeup-preset active" data-makeup="0">素顏</button>
+        <button type="button" class="makeup-preset" data-makeup="natural">自然</button>
+        <button type="button" class="makeup-preset" data-makeup="rose">玫瑰</button>
+        <button type="button" class="makeup-preset" data-makeup="warm">氣色</button>
       </div>
     </section>
-
     <section class="actions">
       <button id="startCamera" class="secondary">開啟前鏡頭</button>
       <button id="switchCamera" class="secondary" disabled>切換後鏡頭</button>
@@ -46,11 +38,10 @@
       <button id="download" class="secondary" disabled>儲存照片</button>
       <button id="reset" class="secondary">重設</button>
     </section>
-
-    <!-- 隱藏 input 僅維持既有程式相容；V1.4 不提供照片圖庫／上傳入口。 -->
     <input id="fileInput" type="file" accept="image/*" hidden>
     <p id="status" class="status" role="status">請先選擇鏡頭</p>
   </main>
+  <script src="makeup-engine.js"></script>
   <script src="app.js"></script>
   <script src="save-handler.js"></script>
 </body>
