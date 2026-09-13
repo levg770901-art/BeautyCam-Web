@@ -13,7 +13,6 @@
   const fileInput = document.getElementById("fileInput");
   const startCameraBtn = document.getElementById("startCamera");
   const switchCameraBtn = document.getElementById("switchCamera");
-  const mirrorToggleBtn = document.getElementById("mirrorToggle");
   const captureBtn = document.getElementById("capture");
   const downloadBtn = document.getElementById("download");
   const resetBtn = document.getElementById("reset");
@@ -43,15 +42,22 @@
   let cameraFacing = "user";
   let mirrorPreview = true;
 
+  const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+  const LEFT_EYE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+  const RIGHT_EYE = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
+  const MOUTH = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78];
+
   function setStatus(text) { statusEl.textContent = text; }
+
   function updateLabels() {
     for (const key of Object.keys(sliders)) values[key].textContent = sliders[key].value;
   }
+
   function setMirrorDisplay(enabled) {
     mirrorPreview = Boolean(enabled);
     canvas.style.transform = mirrorPreview ? "scaleX(-1)" : "none";
-    mirrorToggleBtn.textContent = `鏡像：${mirrorPreview ? "開" : "關"}`;
   }
+
   function releaseCamera() {
     if (previewFrame) cancelAnimationFrame(previewFrame);
     previewFrame = 0;
@@ -59,6 +65,7 @@
     stream = null;
     video.srcObject = null;
   }
+
   function fitSize(width, height, maxSide) {
     const scale = Math.min(1, maxSide / Math.max(width, height));
     return {
@@ -66,6 +73,7 @@
       height: Math.max(1, Math.round(height * scale))
     };
   }
+
   function params() {
     return {
       smooth: Number(sliders.smooth.value) / 100,
@@ -74,16 +82,17 @@
     };
   }
 
-  // V1.2: local/on-device multi-face landmark detection.
+  // Face detection is optional for camera startup. The camera must never wait for this model.
   async function initFaceLandmarker() {
     if (faceLandmarker) return faceLandmarker;
     if (faceInitPromise) return faceInitPromise;
+
     faceInitPromise = (async () => {
       try {
-        setStatus("正在載入臉部辨識模型…");
+        setStatus("相機已開啟，正在載入多人臉美肌…");
         const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js");
-        const filesetResolver = await vision.FilesetResolver.forVisionTasks(VISION_WASM_URL);
-        faceLandmarker = await vision.FaceLandmarker.createFromOptions(filesetResolver, {
+        const resolver = await vision.FilesetResolver.forVisionTasks(VISION_WASM_URL);
+        faceLandmarker = await vision.FaceLandmarker.createFromOptions(resolver, {
           baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate: "GPU" },
           runningMode: "VIDEO",
           numFaces: 5,
@@ -92,19 +101,21 @@
           minTrackingConfidence: 0.55,
           outputFaceBlendshapes: false
         });
-        setStatus("臉部辨識已就緒");
+        if (sourceKind === "camera") setStatus("多人臉美肌已就緒");
         return faceLandmarker;
       } catch (err) {
         console.error("Face Landmarker init failed", err);
         faceLandmarker = null;
-        setStatus("臉部辨識載入失敗，暫用基礎美肌");
+        if (sourceKind === "camera") setStatus("相機正常；臉部辨識未載入，暫用基礎美肌");
         return null;
       } finally {
         faceInitPromise = null;
       }
     })();
+
     return faceInitPromise;
   }
+
   function updateFaces(source, timestamp) {
     if (!faceLandmarker || !source || timestamp - lastFaceTime < 100) return;
     lastFaceTime = timestamp;
@@ -114,6 +125,7 @@
       console.warn("Face detection frame failed", err);
     }
   }
+
   async function detectPhotoFaces(image) {
     if (!faceLandmarker) return [];
     try {
@@ -128,11 +140,6 @@
     }
   }
 
-  const FACE_OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
-  const LEFT_EYE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
-  const RIGHT_EYE = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
-  const MOUTH = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,78];
-
   function pointInPolygon(x, y, poly) {
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -142,9 +149,11 @@
     }
     return inside;
   }
+
   function makeFaceMask(width, height, faces) {
     const mask = new Uint8Array(width * height);
     if (!faces?.length) return mask;
+
     const work = document.createElement("canvas");
     work.width = width;
     work.height = height;
@@ -165,7 +174,6 @@
     const rgba = ctx.getImageData(0, 0, width, height).data;
     for (let i = 0; i < mask.length; i++) mask[i] = rgba[i * 4] > 0 ? 255 : 0;
 
-    // Preserve eyes and mouth detail.
     for (const landmarks of faces) {
       for (const group of [LEFT_EYE, RIGHT_EYE, MOUTH]) {
         const poly = group.map(i => landmarks[i]).filter(Boolean).map(p => [p.x * width, p.y * height]);
@@ -199,17 +207,13 @@
 
     if (p.smooth === 0 && p.soften === 0 && p.whiten === 0) return base;
 
-    const blurCanvas = typeof OffscreenCanvas !== "undefined"
-      ? new OffscreenCanvas(size.width, size.height)
-      : document.createElement("canvas");
+    const blurCanvas = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(size.width, size.height) : document.createElement("canvas");
     blurCanvas.width = size.width;
     blurCanvas.height = size.height;
     const bctx = blurCanvas.getContext("2d", { willReadFrequently: true });
     bctx.drawImage(source, 0, 0, size.width, size.height);
 
-    const copy = typeof OffscreenCanvas !== "undefined"
-      ? new OffscreenCanvas(size.width, size.height)
-      : document.createElement("canvas");
+    const copy = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(size.width, size.height) : document.createElement("canvas");
     copy.width = size.width;
     copy.height = size.height;
     copy.getContext("2d").drawImage(blurCanvas, 0, 0);
@@ -260,6 +264,22 @@
     placeholder.style.display = "none";
     canvas.style.transform = mirror ? "scaleX(-1)" : "none";
   }
+
+  function flipCanvasPixels() {
+    if (!canvas.width || !canvas.height) return;
+    const temp = document.createElement("canvas");
+    temp.width = canvas.width;
+    temp.height = canvas.height;
+    const ctx = temp.getContext("2d");
+    ctx.translate(temp.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(canvas, 0, 0);
+    const out = canvas.getContext("2d");
+    out.setTransform(1, 0, 0, 1, 0, 0);
+    out.clearRect(0, 0, canvas.width, canvas.height);
+    out.drawImage(temp, 0, 0);
+  }
+
   function schedulePhotoRender() {
     if (sourceKind !== "photo" || !originalPhoto) return;
     clearTimeout(photoRenderTimer);
@@ -270,74 +290,76 @@
     }, 50);
   }
 
+  async function openCameraStream() {
+    const preferred = {
+      audio: false,
+      video: {
+        facingMode: { ideal: cameraFacing },
+        width: { ideal: 1280 },
+        height: { ideal: 960 }
+      }
+    };
+    try {
+      return await navigator.mediaDevices.getUserMedia(preferred);
+    } catch (firstErr) {
+      console.warn("Preferred camera constraints failed", firstErr);
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cameraFacing } });
+      } catch (secondErr) {
+        console.warn("Facing-mode fallback failed", secondErr);
+        return await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      }
+    }
+  }
+
   async function startCamera() {
     releaseCamera();
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus("目前環境不支援相機，請使用 HTTPS 網頁");
       return;
     }
+
     try {
-      await initFaceLandmarker();
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { exact: cameraFacing },
-          width: { ideal: 1280 },
-          height: { ideal: 960 }
-        }
-      });
+      // Critical fix: request the camera FIRST. Face Landmarker loads in the background.
+      stream = await openCameraStream();
       video.srcObject = stream;
       await video.play();
       sourceKind = "camera";
+      latestFaces = [];
+      lastFaceTime = -Infinity;
       captureBtn.disabled = false;
       switchCameraBtn.disabled = false;
-      mirrorToggleBtn.disabled = false;
       startCameraBtn.textContent = cameraFacing === "user" ? "前鏡頭已開啟" : "後鏡頭已開啟";
-      setMirrorDisplay(cameraFacing === "user" ? mirrorPreview : false);
+      mirrorPreview = cameraFacing === "user";
+      setMirrorDisplay(mirrorPreview);
       canvas.style.display = "block";
       video.style.display = "none";
       placeholder.style.display = "none";
-      setStatus(faceLandmarker ? `已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭，進行多人臉部美肌` : "相機已開啟，正在即時美顏");
-      latestFaces = [];
-      lastFaceTime = -Infinity;
+      setStatus(`已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭，正在啟動美肌`);
       startPreviewLoop();
+
+      // Do not block camera operation on CDN/WASM/model/GPU initialization.
+      initFaceLandmarker();
     } catch (err) {
-      console.error(err);
-      if (err?.name === "OverconstrainedError") {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: cameraFacing } });
-          video.srcObject = stream;
-          await video.play();
-          sourceKind = "camera";
-          captureBtn.disabled = false;
-          switchCameraBtn.disabled = false;
-          mirrorToggleBtn.disabled = false;
-          startCameraBtn.textContent = cameraFacing === "user" ? "前鏡頭已開啟" : "後鏡頭已開啟";
-          setMirrorDisplay(cameraFacing === "user" ? mirrorPreview : false);
-          setStatus(`已開啟${cameraFacing === "user" ? "前" : "後"}鏡頭`);
-          latestFaces = [];
-          lastFaceTime = -Infinity;
-          startPreviewLoop();
-          return;
-        } catch (fallbackErr) {
-          console.error(fallbackErr);
-          releaseCamera();
-          err = fallbackErr;
-        }
-      }
+      console.error("Camera start failed", err);
       releaseCamera();
       switchCameraBtn.disabled = true;
-      mirrorToggleBtn.disabled = true;
       captureBtn.disabled = true;
-      setStatus(err?.name === "NotAllowedError" ? "相機權限被拒絕，請允許此網站使用相機" : "無法開啟相機");
+      if (err?.name === "NotAllowedError") {
+        setStatus("相機權限被拒絕，請允許此網站使用相機");
+      } else if (err?.name === "NotFoundError") {
+        setStatus("找不到可用的相機");
+      } else if (err?.name === "NotReadableError") {
+        setStatus("相機目前被其他程式占用");
+      } else {
+        setStatus("無法開啟相機，請確認 Safari 的相機權限");
+      }
     }
   }
 
   async function switchCamera() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
     cameraFacing = cameraFacing === "user" ? "environment" : "user";
     mirrorPreview = cameraFacing === "user";
-    setMirrorDisplay(mirrorPreview);
     setStatus(`正在切換至${cameraFacing === "user" ? "前" : "後"}鏡頭…`);
     await startCamera();
   }
@@ -359,7 +381,6 @@
   async function loadPhoto(file) {
     releaseCamera();
     switchCameraBtn.disabled = true;
-    mirrorToggleBtn.disabled = true;
     if (!file.type.startsWith("image/")) throw new Error("Not an image");
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -383,14 +404,16 @@
 
   function capturePhoto() {
     if (sourceKind !== "camera" || !video.videoWidth) return;
-    // Mirror is a display preference only. The saved canvas pixels remain normal orientation.
+    const shouldMirror = cameraFacing === "user";
     showProcessed(processImage(video, video.videoWidth, video.videoHeight, MAX_PHOTO_SIZE, latestFaces), false);
+    // Front-camera saved image follows the mirrored selfie preview; rear camera stays normal.
+    if (shouldMirror) flipCanvasPixels();
+    canvas.style.transform = "none";
     downloadBtn.disabled = false;
     setStatus("照片已完成多人臉美肌");
     releaseCamera();
     sourceKind = "photo-capture";
     switchCameraBtn.disabled = true;
-    mirrorToggleBtn.disabled = true;
     startCameraBtn.textContent = "開啟前鏡頭";
   }
 
@@ -422,22 +445,15 @@
     placeholder.style.display = "grid";
     captureBtn.disabled = true;
     switchCameraBtn.disabled = true;
-    mirrorToggleBtn.disabled = true;
     downloadBtn.disabled = true;
     startCameraBtn.textContent = "開啟前鏡頭";
     cameraFacing = "user";
     mirrorPreview = true;
-    mirrorToggleBtn.textContent = "鏡像：開";
     setStatus("已重設");
   }
 
   startCameraBtn.addEventListener("click", startCamera);
   switchCameraBtn.addEventListener("click", switchCamera);
-  mirrorToggleBtn.addEventListener("click", () => {
-    mirrorPreview = !mirrorPreview;
-    setMirrorDisplay(mirrorPreview);
-    if (sourceKind === "camera") setStatus(`鏡像已${mirrorPreview ? "開啟" : "關閉"}`);
-  });
   captureBtn.addEventListener("click", capturePhoto);
   downloadBtn.addEventListener("click", downloadPhoto);
   resetBtn.addEventListener("click", reset);
