@@ -1,0 +1,38 @@
+:root{
+  --bg:#111;
+  --panel:#1b1b1b;
+  --text:#f5f5f5;
+  --muted:#a9a9a9;
+  --line:#303030;
+  --accent:#fff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif}
+body{min-height:100vh}
+button,input{font:inherit}
+.app{width:min(720px,100%);margin:0 auto;padding:18px 16px 28px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+h1{font-size:22px;margin:0 0 3px}
+.topbar p{margin:0;color:var(--muted);font-size:13px}
+.version{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:5px 8px;border-radius:999px}
+.stage{position:relative;width:100%;aspect-ratio:4/3;background:#050505;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+video,canvas,#photoPreview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+canvas{display:none}
+#photoPreview{display:none}
+.placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#777;font-size:14px}
+.controls{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 15px}
+.control-row+ .control-row{margin-top:15px}
+.control-row label{display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px}
+output{color:var(--muted);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+button,.upload{min-height:44px;border:1px solid var(--line);border-radius:12px;background:#202020;color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer}
+button.primary{background:#fff;color:#111;border-color:#fff;font-weight:700}
+button:disabled{opacity:.35;cursor:not-allowed}
+.upload input{display:none}
+.status{text-align:center;color:var(--muted);font-size:12px;margin:12px 0 0}
+@media (max-width:520px){
+  .app{padding:12px 12px 22px}
+  .stage{border-radius:14px}
+  .actions{grid-template-columns:1fr 1fr}
+}
