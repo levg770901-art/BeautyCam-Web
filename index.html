@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#111">
-  <title>BeautyCam Web V1.1</title>
+  <title>BeautyCam Web V1.2</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
         <h1>BeautyCam</h1>
         <p>自然美肌・磨皮・美白</p>
       </div>
-      <span class="version">V1.1</span>
+      <span class="version">V1.2</span>
     </header>
 
     <section class="stage" aria-label="相機預覽">
@@ -40,7 +40,9 @@
     </section>
 
     <section class="actions">
-      <button id="startCamera" class="secondary">開啟相機</button>
+      <button id="startCamera" class="secondary">開啟前鏡頭</button>
+      <button id="switchCamera" class="secondary" disabled>切換後鏡頭</button>
+      <button id="mirrorToggle" class="secondary" disabled>鏡像：開</button>
       <label class="upload secondary">
         上傳照片
         <input id="fileInput" type="file" accept="image/*">
