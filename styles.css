@@ -16,7 +16,7 @@ h1{font-size:22px;margin:0 0 3px}
 .topbar p{margin:0;color:var(--muted);font-size:13px}
 .version{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:5px 8px;border-radius:999px}
 .stage{position:relative;width:100%;aspect-ratio:4/3;background:#050505;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
-video,canvas,#photoPreview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+video,canvas,#photoPreview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center}
 canvas{display:none}
 #photoPreview{display:none}
 .placeholder{position:absolute;inset:0;display:grid;place-items:center;color:#777;font-size:14px}
@@ -31,6 +31,9 @@ button.primary{background:#fff;color:#111;border-color:#fff;font-weight:700}
 button:disabled{opacity:.35;cursor:not-allowed}
 .upload input{display:none}
 .status{text-align:center;color:var(--muted);font-size:12px;margin:12px 0 0}
+@media (orientation:portrait) and (max-width:720px){
+  .stage{aspect-ratio:3/4}
+}
 @media (max-width:520px){
   .app{padding:12px 12px 22px}
   .stage{border-radius:14px}
