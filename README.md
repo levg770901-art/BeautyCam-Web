@@ -1,67 +1,100 @@
-# BeautyCam-Web V1.2
+# BeautyCam-Web V1.3
 
-BeautyCam Web — 美肌、磨皮、美白相機。
+BeautyCam Web — Natural Beauty Engine，自然美肌、磨皮、美白相機。
 
-> 注意：這是一份依照先前規格重新建構的版本，不是從 GitHub 歷史還原的原始檔。原 repository 歷史最初只有 Initial commit / README。
+> 本專案是依照需求重新建構的 Web 相機版本；不是從最初 GitHub 歷史還原原始程式。
 
-## V1.2 核心原則
+## V1.3 核心定位
+
+V1.3 不追求「磨得越白越漂亮」，而是把照片處理流程升級成較接近自然美肌相機的影像管線：
 
 - 不換臉
 - 不做臉型幾何變形
 - 不大眼、不縮鼻、不瘦臉
-- 上傳照片處理最大邊長 1600px
-- 相機即時處理最大邊長 960px
-- 使用 Canvas / OffscreenCanvas 進行影像處理
-- 避免 nested boxBlur loops
-- 美肌採保守混合並盡量保留邊緣
-- 美白以亮度（luminance）為基礎，並保護高光
-- 前後鏡頭可自由切換
-- **前鏡頭固定使用鏡像預覽，符合自拍相機的直覺操作**
-- **前鏡頭拍照與儲存結果也使用鏡像照片，所見即所得**
+- 前鏡頭固定鏡像預覽，拍照與儲存結果也保持鏡像
 - 後鏡頭維持正常左右方向
-- Face Landmarker 仍使用原始未鏡像影像座標，避免臉部遮罩左右錯位
-- 停止相機時釋放 MediaStream tracks
-- pagehide / beforeunload 時釋放相機資源
-- 使用 MediaPipe Face Landmarker 進行瀏覽器端多人臉 landmark 偵測
-- 以臉部輪廓建立 skin-processing mask，並排除眼睛與嘴部細節
-- 最多同時處理 5 張臉
-- 臉部辨識與影像處理在裝置端進行，不將照片／影像幀上傳到遠端影像處理服務
+- 相機即時處理最大邊長 960px
+- 拍照輸出最大邊長 1600px
+- 拍照後使用較高品質的重新處理流程
+- 多人臉 Face Landmarker，最多 5 張臉
+- 臉部輪廓 mask + 眼睛／嘴巴／鼻部細節保護
+- Feathered mask，降低臉部邊界產生明顯接縫
+- 保守 skin probability 判斷，不再只依賴單一 RGB 條件
+- Edge-protected skin smoothing，降低毛孔與輪廓被過度抹平
+- Natural tone balancing，輕微降低過度泛紅並提升暗部均勻度
+- Luminance-based whitening，高光保護
+- Facial feature detail restoration，讓眼睛與嘴部維持清晰
+- 多人照片自動降低美肌強度，避免塑膠感
+- 使用 Canvas / OffscreenCanvas；不使用 nested boxBlur loops
+- Face Landmarker 與影像處理在瀏覽器裝置端進行，不把照片送到遠端影像處理服務
 
-## 實際使用
+## V1.3 影像管線
 
-1. 以 HTTPS 網站或 localhost 開啟 `index.html`。
-2. 點「開啟前鏡頭」並允許相機權限。
-3. **相機會先立即啟動；Face Landmarker 在背景非同步載入，不再阻塞相機啟動。**
-4. 模型載入完成後，才啟用多人臉美肌；若模型載入失敗，相機仍可使用基礎美肌。
-5. 「切換後鏡頭」可在前／後鏡頭之間切換。
-6. 前鏡頭固定鏡像；後鏡頭固定正常，不另外提供鏡像開關。
-7. 偵測到多人時，各張臉會分別套用美肌處理。
-8. 調整「美肌／磨皮／美白」即可即時套用。
-9. 前鏡頭點「拍照」後，照片會保持與預覽相同的鏡像方向，並以最多 1600px 的處理尺寸輸出。
-10. 後鏡頭拍照則維持正常左右方向。
-11. 「上傳照片」會嘗試進行臉部辨識，再以最多 1600px 處理。
-12. 點「儲存照片」輸出 JPEG。
+```text
+Camera
+  ↓
+960px Live Preview
+  ↓
+Face Landmarker
+  ↓
+Face / Feature Mask
+  ↓
+Feathered Skin Mask
+  ↓
+Skin Probability
+  ↓
+Edge-protected Smoothing
+  ↓
+Natural Tone Balance
+  ↓
+Luminance Whitening + Highlight Protection
+  ↓
+Feature Detail Restoration
+  ↓
+1600px High-quality Capture Render
+  ↓
+JPEG
+  ↓
+iPhone 儲存
+```
 
-手機瀏覽器使用相機時需要安全來源（HTTPS 或 localhost）與使用者授權。正式使用可透過 GitHub Pages、其他 HTTPS 靜態網站，或 localhost。
+## 使用方式
 
-## V1.2 新增
+1. 開啟 HTTPS 網站。
+2. 點「開啟前鏡頭」。
+3. 允許 Safari 使用相機。
+4. 相機先啟動；Face Landmarker 在背景載入，不阻塞相機權限流程。
+5. 前鏡頭預設鏡像；「切換後鏡頭」可切換前／後鏡頭。
+6. 調整「美肌／磨皮／美白」。
+7. 點「拍照」後，V1.3 會用 1600px 上限重新進行高品質處理。
+8. 點「儲存照片」使用目前既有的 iPhone 儲存／分享流程。
+9. V1.3 UI 不提供照片圖庫、上傳或「選擇檔案」入口。
+10. 「重設」會停止相機並清除目前狀態。
 
-- MediaPipe Face Landmarker：瀏覽器端多人臉 landmark 偵測。
-- `numFaces: 5`：支援群體自拍的多臉處理方向。
-- Face Oval mask：美肌主要限制在偵測到的臉部範圍內。
-- Eye / mouth exclusion：保留眼睛與嘴部細節，降低整張臉被模糊的問題。
-- Face-aware whitening：美白主要作用於偵測到的臉部皮膚區域。
-- Front / rear camera switching：可在前後鏡頭間切換。
-- Fixed front-camera mirror：前鏡頭預覽固定鏡像，不提供使用者切換開關。
-- Mirrored front-camera capture：前鏡頭拍照與儲存結果保持鏡像，讓觀景窗與成品一致。
-- Rear-camera normal output：後鏡頭維持正常左右方向。
-- **Non-blocking camera startup：相機啟動與 Face Landmarker 模型載入分離，降低 iPhone Safari 因 CDN/WASM/GPU 模型載入而無法進入相機權限流程的風險。**
-- 若模型載入失敗，會自動退回基礎美肌，不讓相機整體失效。
+## 與 V1.2 的主要差異
 
-## V1.2 限制
+### V1.2
 
-目前的 face mask 是「臉部輪廓 + 顏色條件」的第一版，還不是商用美容相機等級的完整 skin segmentation。因此髮際線、眉毛、鬍鬚、耳朵與不同光線下的皮膚邊界仍可能需要進一步改善。
+Face Oval → RGB Skin Rule → Blur → Whitening
 
-下一個工程方向：
+### V1.3
 
-Face Landmarker → 更精準 skin segmentation → feather / edge-aware mask → 多臉效能最佳化 → 群體自拍自然美顏。
+Face Landmarker → Feathered Face Mask → Skin Probability → Edge Protection → Tone Balance → Highlight-safe Whitening → Feature Detail Restoration
+
+V1.3 的主要改善不是增加更多按鈕，而是改善同樣三個控制項背後的影像品質。
+
+## 已知限制
+
+- V1.3 仍不是商用相機 App 等級的完整 AI skin segmentation。
+- 膚色判斷仍是裝置端規則式 probability gate，極端光線、彩色燈光、非常暗或非常亮的膚色仍可能降低準確度。
+- 尚未加入痘痘／斑點 inpainting、牙齒／眼白修飾、生成式 AI 修復或臉型變形。
+- Web 相機效能受 iPhone Safari、GPU、MediaPipe WASM／WebGL 狀態影響。
+- Face Landmarker 載入失敗時，相機仍應保持可用，但會退回較保守的基礎處理。
+
+## 技術原則
+
+V1.3 優先順序是：
+
+**自然 > 穩定 > 細節 > 強度**
+
+不以「最大美肌強度」作為品質指標。最終照片應維持人物辨識度、五官清晰度與自然皮膚紋理。
