@@ -2,7 +2,7 @@ name: Deploy BeautyCam Web to GitHub Pages
 
 on:
   push:
-    branches: ["beautycam-v1.1-rebuilt"]
+    branches: ["beautycam-v1.7"]
   workflow_dispatch:
 
 permissions:
