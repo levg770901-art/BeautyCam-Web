@@ -1,23 +1,257 @@
 (() => {
   "use strict";
-  const BL=[70,63,105,66,107],BR=[336,296,334,293,300];
-  const P={natural:{blush:[228,82,104],shadow:[151,91,132],lip:[202,68,88],brow:[68,45,42]},rose:{blush:[242,72,104],shadow:[169,70,145],lip:[216,48,82],brow:[62,40,42]},warm:{blush:[238,111,72],shadow:[170,91,62],lip:[207,61,52],brow:[72,48,38]}};
-  const RIGHT_UPPER_EYE=[246,161,160,159,158,157,173],LEFT_UPPER_EYE=[466,388,387,386,385,384,398];
-  const OUTER_LIP=[61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146];
-  const INNER_LIP=[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95];
-  let style="natural",amount=0,browShape="natural",lipShape="natural";
-  const pt=(f,i,w,h,mirror=false)=>{const q=f?.[i];if(!q)return null;return [(mirror?1-q.x:q.x)*w,q.y*h]};
-  const dist=(a,b)=>a&&b?Math.hypot(a[0]-b[0],a[1]-b[1]):0;
-  const rgba=(c,a)=>`rgba(${c[0]},${c[1]},${c[2]},${Math.max(0,Math.min(1,a))})`;
-  function polygon(ctx,points){const p=points.filter(Boolean);if(p.length<3)return false;ctx.beginPath();ctx.moveTo(...p[0]);for(let i=1;i<p.length;i++)ctx.lineTo(...p[i]);ctx.closePath();return true}
-  function glow(x,cx,cy,rx,ry,c,a){x.save();const g=x.createRadialGradient(cx,cy,0,cx,cy,Math.max(rx,ry));g.addColorStop(0,rgba(c,a));g.addColorStop(.55,rgba(c,a*.48));g.addColorStop(1,rgba(c,0));x.fillStyle=g;x.beginPath();x.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);x.fill();x.restore()}
-  function cheekCenter(f,w,h,side,mirror){const eye=pt(f,side?263:33,w,h,mirror),face=pt(f,side?454:234,w,h,mirror),mouth=pt(f,side?291:61,w,h,mirror),nose=pt(f,1,w,h,mirror);if(!eye||!face||!mouth)return null;let cx=.35*eye[0]+.40*face[0]+.25*mouth[0],cy=.35*eye[1]+.40*face[1]+.25*mouth[1];const fw=dist(pt(f,234,w,h,mirror),pt(f,454,w,h,mirror));cx += (side?1:-1)*fw*.03;if(nose){const eyeDist=dist(pt(f,33,w,h,mirror),pt(f,263,w,h,mirror));const radius=eyeDist*.32;let dx=cx-nose[0],dy=cy-nose[1],d=Math.hypot(dx,dy);if(d<radius){const outX=face[0]-nose[0],outY=face[1]-nose[1],out=Math.hypot(outX,outY)||1;cx=nose[0]+outX/out*(radius+eyeDist*.08);cy=nose[1]+outY/out*(radius+eyeDist*.08)}}return [cx,cy]}
-  function blush(x,f,w,h,c,a,side,mirror){const center=cheekCenter(f,w,h,side,mirror);const left=pt(f,234,w,h,mirror),right=pt(f,454,w,h,mirror),top=pt(f,10,w,h,mirror),bottom=pt(f,152,w,h,mirror);if(!center||!left||!right||!top||!bottom)return;const fw=dist(left,right),fh=dist(top,bottom);glow(x,center[0],center[1],fw*.11,fh*.075,c,.48*a)}
-  function browGeometry(f,w,h,ids,mirror){const p=ids.map(i=>pt(f,i,w,h,mirror)).filter(Boolean);if(p.length<3)return null;const s=p[0],e=p[p.length-1],baseY=(s[1]+e[1])/2,eyeWidth=ids===BL?dist(pt(f,33,w,h,mirror),pt(f,133,w,h,mirror)):dist(pt(f,263,w,h,mirror),pt(f,362,w,h,mirror));const center=p.map((q,i)=>{let y=q[1];if(browShape==="straight")y+=((baseY-y)*.72);else if(browShape==="arch")y-=eyeWidth*.055*(1-Math.abs(i-2)/2);return [q[0],y]});const half=Math.max(1.5,eyeWidth*.025),top=[],bottom=[];for(let i=0;i<center.length;i++){const prev=center[Math.max(0,i-1)],next=center[Math.min(center.length-1,i+1)],dx=next[0]-prev[0],dy=next[1]-prev[1],len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;top.push([center[i][0]+nx*half,center[i][1]+ny*half]);bottom.push([center[i][0]-nx*half,center[i][1]-ny*half])}return top.concat(bottom.reverse())}
-  function brow(x,f,w,h,c,a,ids,mirror){const poly=browGeometry(f,w,h,ids,mirror);if(!poly)return;const mask=document.createElement("canvas");mask.width=w;mask.height=h;const m=mask.getContext("2d");if(!polygon(m,poly))return;m.fillStyle="#fff";m.fill();const feather=Math.max(1,Math.round(dist(pt(f,ids===BL?33:263,w,h,mirror),pt(f,ids===BL?133:362,w,h,mirror))*.012));const soft=document.createElement("canvas");soft.width=w;soft.height=h;const s=soft.getContext("2d");s.filter=`blur(${feather}px)`;s.drawImage(mask,0,0);x.save();x.globalAlpha=Math.max(0,Math.min(1,.55+.25*a));x.drawImage(soft,0,0);x.globalCompositeOperation="source-in";x.fillStyle=rgba(c,1);x.fillRect(0,0,w,h);x.restore()}
-  function lips(x,f,w,h,c,a,mirror){const outer=OUTER_LIP.map(i=>pt(f,i,w,h,mirror)),inner=INNER_LIP.map(i=>pt(f,i,w,h,mirror));if(outer.some(v=>!v)||inner.some(v=>!v))return;const mask=document.createElement("canvas");mask.width=w;mask.height=h;const m=mask.getContext("2d");m.fillStyle="#fff";polygon(m,outer);m.fill();m.globalCompositeOperation="destination-out";polygon(m,inner);m.fill();const feather=Math.max(1,Math.round(dist(pt(f,61,w,h,mirror),pt(f,291,w,h,mirror))*.006));const soft=document.createElement("canvas");soft.width=w;soft.height=h;const s=soft.getContext("2d");s.filter=`blur(${feather}px)`;s.drawImage(mask,0,0);const color=document.createElement("canvas");color.width=w;color.height=h;const cc=color.getContext("2d");cc.fillStyle=rgba(c,.58*a);cc.fillRect(0,0,w,h);cc.globalCompositeOperation="destination-in";cc.drawImage(soft,0,0);x.drawImage(cc,0,0)}
-  function eyeOpening(f,left,w,h,mirror){const pairs=left?[[386,374],[385,373]]:[[159,145],[158,144]];const opening=(dist(pt(f,pairs[0][0],w,h,mirror),pt(f,pairs[0][1],w,h,mirror))+dist(pt(f,pairs[1][0],w,h,mirror),pt(f,pairs[1][1],w,h,mirror)))/2;const width=left?dist(pt(f,263,w,h,mirror),pt(f,362,w,h,mirror)):dist(pt(f,33,w,h,mirror),pt(f,133,w,h,mirror));return width?opening/width:0}
-  function eyes(x,f,w,h,c,a,mirror){const configs=[{left:false,upper:RIGHT_UPPER_EYE,c1:33,c2:133},{left:true,upper:LEFT_UPPER_EYE,c1:263,c2:362}];for(const cfg of configs){const upper=cfg.upper.map(i=>pt(f,i,w,h,mirror)).filter(Boolean),start=pt(f,cfg.c1,w,h,mirror),end=pt(f,cfg.c2,w,h,mirror);if(upper.length<2||!start||!end)continue;const ratio=eyeOpening(f,cfg.left,w,h,mirror),threshold=.15,ew=dist(start,end),browInner=cfg.left?pt(f,300,w,h,mirror):pt(f,107,w,h,mirror);let height=ew*(ratio<threshold?.028:.11);if(browInner){const gap=Math.max(0,browInner[1]-Math.min(...upper.map(p=>p[1])));if(gap>0)height=Math.min(height,gap*.62)}const base=[];for(let i=0;i<upper.length;i++){const t=i/(upper.length-1),bx=start[0]+(end[0]-start[0])*t,by=start[1]+(end[1]-start[1])*t;base.push([bx,by+height])}const poly=upper.concat(base.reverse());if(!polygon(x,poly))continue;const g=x.createLinearGradient(0,Math.min(...poly.map(p=>p[1])),0,Math.max(...poly.map(p=>p[1])));g.addColorStop(0,rgba(c,.32*a));g.addColorStop(1,rgba(c,0));x.fillStyle=g;x.fill()}}
-  function render(ctx,faces,w,h,o={}){const a=Math.max(0,Math.min(1,Number(o.amount??amount)));if(!ctx||!faces?.length||a<=.001)return;const p=P[o.style||style]||P.natural,layer=document.createElement("canvas");layer.width=w;layer.height=h;const x=layer.getContext("2d");const mirror=!!o.mirror;for(const f of faces){const ed=dist(pt(f,33,w,h,mirror),pt(f,263,w,h,mirror));if(!ed)continue;eyes(x,f,w,h,p.shadow,a,mirror);blush(x,f,w,h,p.blush,a,false,mirror);blush(x,f,w,h,p.blush,a,true,mirror);lips(x,f,w,h,p.lip,a,mirror);brow(x,f,w,h,p.brow,a,BL,mirror);brow(x,f,w,h,p.brow,a,BR,mirror)}ctx.drawImage(layer,0,0)}
-  window.BeautyCamMakeup={setStyle:v=>{if(P[v])style=v},setAmount:v=>{amount=Math.max(0,Math.min(1,Number(v)/100))},setBrowShape:v=>{browShape=v||"natural"},setLipShape:v=>{lipShape=v||"natural"},render};
+
+  // BeautyCam V2.0 Makeup Engine
+  // Geometry -> mask -> feather -> color -> makeup layer.
+  const STYLES = {
+    natural: {
+      lip: [202, 68, 88],
+      blush: [242, 92, 112],
+      brow: [68, 45, 42],
+      shadow: [151, 91, 132]
+    },
+    rose: {
+      lip: [216, 48, 82],
+      blush: [242, 72, 104],
+      brow: [62, 40, 42],
+      shadow: [169, 70, 145]
+    },
+    warm: {
+      lip: [207, 61, 52],
+      blush: [238, 111, 72],
+      brow: [72, 48, 38],
+      shadow: [170, 91, 62]
+    }
+  };
+
+  let style = "natural";
+  let amount = 0;
+  let browShape = "natural";
+  let lipShape = "natural";
+
+  const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${clamp(a)})`;
+
+  function makeMask(w, h) {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    return c;
+  }
+
+  function point(face, index, rc) {
+    const q = face?.[index];
+    if (!q) return null;
+    return [
+      (rc.mirror ? 1 - q.x : q.x) * rc.width,
+      q.y * rc.height
+    ];
+  }
+
+  function distance(a, b) {
+    return a && b ? Math.hypot(a[0] - b[0], a[1] - b[1]) : 0;
+  }
+
+  function polygon(ctx, points) {
+    const p = points.filter(Boolean);
+    if (p.length < 3) return false;
+    ctx.beginPath();
+    ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
+    ctx.closePath();
+    return true;
+  }
+
+  function fillPolygon(ctx, points, fill = "#fff") {
+    if (!polygon(ctx, points)) return false;
+    ctx.fillStyle = fill;
+    ctx.fill();
+    return true;
+  }
+
+  function feather(mask, radius) {
+    const out = makeMask(mask.width, mask.height);
+    const ctx = out.getContext("2d");
+    ctx.filter = `blur(${Math.max(0.5, radius)}px)`;
+    ctx.drawImage(mask, 0, 0);
+    return out;
+  }
+
+  function createLipMask(rc) {
+    const g = rc.faceGeometry;
+    const mask = makeMask(rc.width, rc.height);
+    const ctx = mask.getContext("2d");
+    fillPolygon(ctx, g.outerLip);
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    fillPolygon(ctx, g.innerLip);
+    ctx.restore();
+    return mask;
+  }
+
+  function createBrowMask(rc, side) {
+    const g = rc.faceGeometry;
+    const source = side === "left" ? g.leftBrow : g.rightBrow;
+    const mask = makeMask(rc.width, rc.height);
+    if (source.length < 3) return mask;
+
+    const center = source.map((p, i) => {
+      let y = p[1];
+      if (browShape === "straight") {
+        const endpoints = (source[0][1] + source[source.length - 1][1]) / 2;
+        y += (endpoints - y) * 0.72;
+      } else if (browShape === "arch") {
+        const midFactor = 1 - Math.abs(i - 2) / 2;
+        y -= g.eyeWidth * 0.055 * Math.max(0, midFactor);
+      }
+      return [p[0], y];
+    });
+
+    const eyeWidth = side === "left"
+      ? distance(point(g.face, 33, rc), point(g.face, 133, rc))
+      : distance(point(g.face, 263, rc), point(g.face, 362, rc));
+    const half = Math.max(2, eyeWidth * 0.025);
+    const upper = [];
+    const lower = [];
+
+    for (let i = 0; i < center.length; i++) {
+      const prev = center[Math.max(0, i - 1)];
+      const next = center[Math.min(center.length - 1, i + 1)];
+      const dx = next[0] - prev[0];
+      const dy = next[1] - prev[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      upper.push([center[i][0] + nx * half, center[i][1] + ny * half]);
+      lower.push([center[i][0] - nx * half, center[i][1] - ny * half]);
+    }
+
+    fillPolygon(mask.getContext("2d"), upper.concat(lower.reverse()));
+    return mask;
+  }
+
+  function createEyeshadowMask(rc, side) {
+    const g = rc.faceGeometry;
+    const points = side === "left" ? g.leftEye : g.rightEye;
+    const mask = makeMask(rc.width, rc.height);
+    fillPolygon(mask.getContext("2d"), points);
+    return mask;
+  }
+
+  function createBlushMask(rc, side) {
+    const g = rc.faceGeometry;
+    const mask = makeMask(rc.width, rc.height);
+    const ctx = mask.getContext("2d");
+    const center = side === "left" ? g.leftCheek : g.rightCheek;
+    if (!center || !g.faceWidth || !g.faceHeight) return mask;
+
+    const rx = g.faceWidth * 0.115;
+    const ry = g.faceHeight * 0.075;
+    const gradient = ctx.createRadialGradient(center[0], center[1], 0, center[0], center[1], Math.max(rx, ry));
+    gradient.addColorStop(0, "rgba(255,0,0,1)");
+    gradient.addColorStop(0.55, "rgba(255,0,0,0.62)");
+    gradient.addColorStop(1, "rgba(255,0,0,0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(center[0], center[1], rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return mask;
+  }
+
+  function paintMask(mask, color, opacity, rc, target) {
+    const soft = feather(mask, Math.max(1, Math.min(rc.width, rc.height) * 0.003));
+    const layer = makeMask(rc.width, rc.height);
+    const lctx = layer.getContext("2d");
+    lctx.fillStyle = rgba(color, clamp(opacity));
+    lctx.fillRect(0, 0, rc.width, rc.height);
+    lctx.globalCompositeOperation = "destination-in";
+    lctx.drawImage(soft, 0, 0);
+    target.drawImage(layer, 0, 0);
+  }
+
+  function renderLip(rc, target, color, a) {
+    const mask = createLipMask(rc);
+    // First validation target: 100% must be visibly colored.
+    paintMask(mask, color, clamp(0.82 * a), rc, target);
+  }
+
+  function renderBlush(rc, target, color, a, side) {
+    const mask = createBlushMask(rc, side);
+    paintMask(mask, color, clamp(0.70 * a), rc, target);
+  }
+
+  function renderBrow(rc, target, color, a, side) {
+    const mask = createBrowMask(rc, side);
+    paintMask(mask, color, clamp(0.88 * a), rc, target);
+  }
+
+  function renderEyeshadow(rc, target, color, a, side) {
+    const mask = createEyeshadowMask(rc, side);
+    paintMask(mask, color, clamp(0.58 * a), rc, target);
+  }
+
+  function renderMakeupLayer(rc) {
+    const layer = makeMask(rc.width, rc.height);
+    if (!rc.faceGeometry || rc.makeupParams.amount <= 0) return layer;
+
+    const target = layer.getContext("2d");
+    const colors = STYLES[style] || STYLES.natural;
+    const a = clamp(rc.makeupParams.amount);
+
+    // Stable compositing order; makeup never mutates the beauty/source layer.
+    renderEyeshadow(rc, target, colors.shadow, a, "left");
+    renderEyeshadow(rc, target, colors.shadow, a, "right");
+    renderBlush(rc, target, colors.blush, a, "left");
+    renderBlush(rc, target, colors.blush, a, "right");
+    renderLip(rc, target, colors.lip, a);
+    renderBrow(rc, target, colors.brow, a, "left");
+    renderBrow(rc, target, colors.brow, a, "right");
+
+    return layer;
+  }
+
+  function getDebugMask(mode, rc) {
+    if (!rc.faceGeometry) return null;
+    if (mode === "lip") return feather(createLipMask(rc), Math.max(1, Math.min(rc.width, rc.height) * 0.002));
+    if (mode === "brow") {
+      const out = makeMask(rc.width, rc.height);
+      const ctx = out.getContext("2d");
+      ctx.drawImage(createBrowMask(rc, "left"), 0, 0);
+      ctx.drawImage(createBrowMask(rc, "right"), 0, 0);
+      return out;
+    }
+    if (mode === "eye") {
+      const out = makeMask(rc.width, rc.height);
+      const ctx = out.getContext("2d");
+      ctx.drawImage(createEyeshadowMask(rc, "left"), 0, 0);
+      ctx.drawImage(createEyeshadowMask(rc, "right"), 0, 0);
+      return out;
+    }
+    if (mode === "blush") {
+      const out = makeMask(rc.width, rc.height);
+      const ctx = out.getContext("2d");
+      ctx.drawImage(createBlushMask(rc, "left"), 0, 0);
+      ctx.drawImage(createBlushMask(rc, "right"), 0, 0);
+      return out;
+    }
+    return null;
+  }
+
+  window.BeautyCamMakeup = {
+    setStyle: value => {
+      if (STYLES[value]) style = value;
+    },
+    setAmount: value => {
+      amount = clamp(Number(value) / 100);
+    },
+    setBrowShape: value => {
+      browShape = value || "natural";
+    },
+    setLipShape: value => {
+      lipShape = value || "natural";
+    },
+    renderMakeupLayer,
+    getDebugMask,
+    getState: () => ({ style, amount, browShape, lipShape })
+  };
 })();
