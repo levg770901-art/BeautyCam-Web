@@ -8,11 +8,16 @@ export function skinProbability(r,g,b){
   const toneGate=clamp((y-35)/35)*clamp((250-y)/35);
   return hueGate*chromaGate*toneGate;
 }
-export function buildSkinMask(data,w,h,face,protect){
+export function buildSkinMask(data,w,h,face,protect,maskW=w,maskH=h){
   const m=new Float32Array(w*h);
-  for(let i=0,p=0;i<m.length;i++,p+=4){
-    const base=face[i]*skinProbability(data[p],data[p+1],data[p+2]);
-    m[i]=base*(1-protect[i]*.96);
+  const sx=maskW/w,sy=maskH/h;
+  for(let y=0;y<h;y++){
+    const fy=Math.min(maskH-1,Math.floor(y*sy)),row=fy*maskW;
+    for(let x=0;x<w;x++){
+      const fx=Math.min(maskW-1,Math.floor(x*sx)),mi=row+fx,p=(y*w+x)*4;
+      const base=face[mi]*skinProbability(data[p],data[p+1],data[p+2]);
+      m[y*w+x]=base*(1-protect[mi]*.96);
+    }
   }
   return m;
 }
