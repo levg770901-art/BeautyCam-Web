@@ -52,18 +52,12 @@ export function featureDistanceMask(w,h,face){
   const p=face.landmarks;
   if(protectCanvas.width!==w||protectCanvas.height!==h){protectCanvas.width=w;protectCanvas.height=h}
   const x=protectCtx||(protectCtx=protectCanvas.getContext("2d",{willReadFrequently:true}));
-  x.clearRect(0,0,w,h);x.fillStyle="#fff";
-  for(const ids of [...EYES,MOUTH,...BROWS])rasterPolygon(x,ids,p,w,h);
-  x.filter="blur(3px)";x.globalAlpha=.85;
+  x.clearRect(0,0,w,h);x.fillStyle="#fff";x.filter="blur(2px)";x.globalAlpha=.9;
   for(const ids of [...EYES,MOUTH,...BROWS])rasterPolygon(x,ids,p,w,h);
   x.filter="none";x.globalAlpha=1;
   const d=x.getImageData(0,0,w,h).data;
   for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;
   return m;
 }
-export function protectFeatures(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;
-if(protectCanvas.width!==w||protectCanvas.height!==h){protectCanvas.width=w;protectCanvas.height=h}
-const x=protectCtx||(protectCtx=protectCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);x.fillStyle="#fff";const p=face.landmarks;
-for(const ids of [...EYES,MOUTH,...BROWS])rasterPolygon(x,ids,p,w,h);
-const d=x.getImageData(0,0,w,h).data;for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;return featherMask(m,w,h,1)}
+export function protectFeatures(w,h,face){return featureDistanceMask(w,h,face)}
 export function smoothLandmarks(previous,current,alpha=.32){if(!current?.length)return previous||[];if(!previous?.length)return current;return current.map((p,i)=>{const q=previous[i]||p;return{x:q.x*(1-alpha)+p.x*alpha,y:q.y*(1-alpha)+p.y*alpha,z:(q.z??0)*(1-alpha)+(p.z??0)*alpha}})}
