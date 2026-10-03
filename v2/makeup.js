@@ -7,7 +7,7 @@ const OUTER=[61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,1
 const INNER=[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95];
 const BL=[70,63,105,66,107],BR=[336,296,334,293,300];
 const LE=[33,160,158,133,153,144],RE=[362,385,387,263,373,380];
-const pt=(f,i,w,h)=>f?.[i]?[f[i].x*w,f[i].y*h]:null;
+const pt=(f,i,w,h)=>f?.[i]?[f[i].x*w,f[i].y*h]:null;\nconst blend=(expression,name)=>{const x=expression?.find?.(v=>v.categoryName===name);return x?.score||0};
 const faceAngle=(f,w,h)=>{const l=pt(f,33,w,h),r=pt(f,263,w,h);return l&&r?Math.atan2(r[1]-l[1],r[0]-l[0]):0};
 const faceScale=(f,w,h)=>{const l=pt(f,33,w,h),r=pt(f,263,w,h);return l&&r?Math.hypot(r[0]-l[0],r[1]-l[1]):w*.24};
 const faceDepth=(f,w,h)=>{const l=pt(f,33,w,h),r=pt(f,263,w,h),nose=pt(f,1,w,h);if(!l||!r||!nose)return 1;const eyeW=Math.max(1,Math.hypot(r[0]-l[0],r[1]-l[1])),noseX=(nose[0]-l[0])/eyeW;return Math.max(.62,Math.min(1.12,Math.abs(noseX-.5)*1.8+.72))};
