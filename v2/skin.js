@@ -12,8 +12,7 @@ export function buildSkinMask(data,w,h,face,protect){
   const m=new Float32Array(w*h);
   for(let i=0,p=0;i<m.length;i++,p+=4){
     const base=face[i]*skinProbability(data[p],data[p+1],data[p+2]);
-    const edge=protect[i];
-    m[i]=base*(1-edge*.96);
+    m[i]=base*(1-protect[i]*.96);
   }
   return m;
 }
@@ -25,5 +24,19 @@ export function blurRGBA(data,w,h,radius){
   for(let x=0;x<w;x++){let sr=0,sg=0,sb=0,sa=0;
     for(let y=-r;y<=r;y++){const yy=Math.max(0,Math.min(h-1,y)),p=(yy*w+x)*4;sr+=tmp[p];sg+=tmp[p+1];sb+=tmp[p+2];sa+=tmp[p+3]}
     for(let y=0;y<h;y++){const p=(y*w+x)*4;out[p]=sr/diam;out[p+1]=sg/diam;out[p+2]=sb/diam;out[p+3]=sa/diam;const add=Math.min(h-1,y+r+1),sub=Math.max(0,y-r),q=(add*w+x)*4,s=(sub*w+x)*4;sr+=tmp[q]-tmp[s];sg+=tmp[q+1]-tmp[s+1];sb+=tmp[q+2]-tmp[s+2]}}
+  return out;
+}
+export function detailPreservingSmooth(data,w,h,radius=2){
+  const base=blurRGBA(data,w,h,radius),out=new Uint8ClampedArray(data.length);
+  for(let i=0;i<data.length;i+=4){
+    const lum=.2126*data[i]+.7152*data[i+1]+.0722*data[i+2];
+    const baseLum=.2126*base[i]+.7152*base[i+1]+.0722*base[i+2];
+    const detail=lum-baseLum;
+    const preserve=clamp(1-Math.abs(detail)/34,.18,.72);
+    out[i]=clamp(base[i]+(data[i]-base[i])*preserve);
+    out[i+1]=clamp(base[i+1]+(data[i+1]-base[i+1])*preserve);
+    out[i+2]=clamp(base[i+2]+(data[i+2]-base[i+2])*preserve);
+    out[i+3]=data[i+3];
+  }
   return out;
 }
