@@ -42,30 +42,14 @@ function skinProbability(r,g,b){
 }
 
 function smooth(data,w,h,radius){
-  const r=Math.max(1,Math.min(4,Math.round(radius)));
-  const src=new Uint8ClampedArray(data),out=new Uint8ClampedArray(data);
-  const tmp=new Float32Array(data.length);
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      let R=0,G=0,B=0,n=0;
-      for(let xx=Math.max(0,x-r);xx<=Math.min(w-1,x+r);xx++){
-        const p=(y*w+xx)*4;R+=src[p];G+=src[p+1];B+=src[p+2];n++;
-      }
-      const p=(y*w+x)*4;tmp[p]=R/n;tmp[p+1]=G/n;tmp[p+2]=B/n;
-    }
-  }
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    let R=0,G=0,B=0,n=0;
-    for(let yy=Math.max(0,y-r);yy<=Math.min(h-1,y+r);yy++){
-      const p=(yy*w+x)*4;R+=tmp[p];G+=tmp[p+1];B+=tmp[p+2];n++;
-    }
-    const p=(y*w+x)*4;out[p]=R/n;out[p+1]=G/n;out[p+2]=B/n;
-  }
+  const r=Math.max(1,Math.min(4,Math.round(radius))),src=new Uint8ClampedArray(data),tmp=new Float32Array(data.length),out=new Uint8ClampedArray(data);
+  for(let y=0;y<h;y++){let R=0,G=0,B=0,n=0;for(let x=-r;x<=r;x++){const xx=Math.max(0,Math.min(w-1,x)),p=(y*w+xx)*4;R+=src[p];G+=src[p+1];B+=src[p+2];n++}for(let x=0;x<w;x++){const p=(y*w+x)*4;tmp[p]=R/n;tmp[p+1]=G/n;tmp[p+2]=B/n;const add=Math.min(w-1,x+r+1),sub=Math.max(0,x-r),a=(y*w+add)*4,s=(y*w+sub)*4;R+=src[a]-src[s];G+=src[a+1]-src[s+1];B+=src[a+2]-src[s+2]}}
+  for(let x=0;x<w;x++){let R=0,G=0,B=0,n=0;for(let y=-r;y<=r;y++){const yy=Math.max(0,Math.min(h-1,y)),p=(yy*w+x)*4;R+=tmp[p];G+=tmp[p+1];B+=tmp[p+2];n++}for(let y=0;y<h;y++){const p=(y*w+x)*4;out[p]=R/n;out[p+1]=G/n;out[p+2]=B/n;out[p+3]=src[p+3];const add=Math.min(h-1,y+r+1),sub=Math.max(0,y-r),a=(add*w+x)*4,s=(sub*w+x)*4;R+=tmp[a]-tmp[s];G+=tmp[a+1]-tmp[s+1];B+=tmp[a+2]-tmp[s+2]}}
   return out;
 }
 
 export function beauty(data,w,h,faceMask,featureProtection,settings){
-  const soft=settings.soft/100,light=settings.light/100;
+  const soft=settings.soft/100,tone=settings.tone/100,light=settings.light/100;
   const smoothData=soft?smooth(data,w,h,.8+soft*2.8):data;
   const out=new Uint8ClampedArray(data);
   for(let i=0,p=0;i<faceMask.length;i++,p+=4){
@@ -79,7 +63,7 @@ export function beauty(data,w,h,faceMask,featureProtection,settings){
     out[p+1]=data[p+1]+(smoothData[p+1]-data[p+1])*smoothAmount;
     out[p+2]=data[p+2]+(smoothData[p+2]-data[p+2])*smoothAmount;
     const y=.2126*out[p]+.7152*out[p+1]+.0722*out[p+2];
-    const lift=light*.075*mask*clamp((232-y)/86);
+    const warmth=(out[p]-out[p+1]*.86-out[p+2]*.52)/255;const toneFix=clamp(-warmth*.55)*tone*.055*mask;out[p]=Math.min(255,out[p]+out[p]*toneFix);out[p+1]=Math.min(255,out[p+1]+out[p+1]*toneFix*.45);const lift=light*.075*mask*clamp((232-y)/86);
     out[p]=Math.min(255,out[p]+out[p]*lift);
     out[p+1]=Math.min(255,out[p+1]+out[p+1]*lift);
     out[p+2]=Math.min(255,out[p+2]+out[p+2]*lift);
