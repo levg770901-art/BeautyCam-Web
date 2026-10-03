@@ -1,6 +1,6 @@
 import {CameraEngine} from "./camera.js";
 import {LandmarkProvider} from "./landmarks.js";
-import {faceFromLandmarks,landmarkMask,softSkinWeight,smoothLandmarks} from "./geometry.js";
+import {faceFromLandmarks,faceRegionMask,softSkinWeight,smoothLandmarks} from "./geometry.js";
 import {buildSkinMask} from "./skin.js";
 import {processBeauty} from "./beauty.js";
 import {Renderer} from "./renderer.js";
@@ -18,7 +18,7 @@ const updateLabels=()=>Object.keys(controls).forEach(k=>$(k+"Value").textContent
 const sizeFor=max=>{const s=Math.min(1,max/Math.max(video.videoWidth,video.videoHeight));return[Math.max(1,Math.round(video.videoWidth*s)),Math.max(1,Math.round(video.videoHeight*s))]};
 async function detect(){if(detectBusy)return stable;detectBusy=true;const t=performance.now();try{const pts=await landmarks.detect(video);stable=smoothLandmarks(stable,pts,.28)}finally{perf.detectMs=performance.now()-t;detectBusy=false}return stable}
 async function render(max=720,doDetect=true){if(!video.videoWidth)return;const t=performance.now();const[w,h]=sizeFor(max);renderer.resize(w,h);renderer.draw(video,camera.mirrored);const raw=renderer.frame();const pts=doDetect?await detect():stable;const face=faceFromLandmarks(pts,w,h,camera.mirrored);if(!face){renderer.put(raw);setStatus("V2.0 · 尋找臉部…");return}const [mw,mh]=maskSize(w,h);
-const faceMask=landmarkMask(mw,mh,face);
+const faceMask=faceRegionMask(mw,mh,face);
 const protectMask=softSkinWeight(mw,mh,face);
 const skin=buildSkinMask(raw.data,w,h,faceMask,protectMask,mw,mh);
 renderer.put(new ImageData(processBeauty(raw.data,w,h,skin,settings(),{preview:max<1000}),w,h));
