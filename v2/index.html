@@ -3,31 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#101010">
-<title>BeautyCam V2.0 Core</title>
-<link rel="stylesheet" href="./styles.css">
+<meta name="theme-color" content="#08090c">
+<title>BeautyCam V2.0</title>
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <main class="app">
-<header class="topbar"><div><h1>BeautyCam</h1><p>V2.0 · Natural Beauty</p></div><span class="version">V2.0</span></header>
-<section class="stage" aria-label="V2.0 相機預覽">
-<video id="video" autoplay playsinline muted></video>
-<canvas id="canvas"></canvas>
-<div id="placeholder" class="placeholder">點擊「開啟前鏡頭」</div>
-</section>
-<section class="controls">
-<div class="control-row"><label>美肌 <output id="smoothValue">35</output></label><input id="smooth" type="range" min="0" max="100" value="35"></div>
-<div class="control-row"><label>磨皮 <output id="softenValue">20</output></label><input id="soften" type="range" min="0" max="100" value="20"></div>
-<div class="control-row"><label>美白 <output id="whitenValue">10</output></label><input id="whiten" type="range" min="0" max="100" value="10"></div><div class="control-row"><label>彩妝 <output id="makeupValue">0</output></label><input id="makeup" type="range" min="0" max="100" value="0"></div><div class="presets"><button type="button" data-style="natural">自然</button><button type="button" data-style="rose">玫瑰</button><button type="button" data-style="warm">氣色</button></div>
-</section>
-<section class="actions">
-<button id="start" class="secondary">開啟前鏡頭</button>
-<button id="switch" class="secondary" disabled>切換鏡頭</button>
-<button id="capture" class="primary" disabled>拍照</button>
-<button id="save" class="secondary" disabled>儲存照片</button>
-<button id="reset" class="secondary">重設</button>
-</section>
-<p id="status" class="status">準備就緒</p>
+  <section class="stage">
+    <video id="camera" autoplay playsinline muted></video>
+    <canvas id="output"></canvas>
+    <div id="hint" class="hint">BeautyCam V2.0</div>
+    <div id="status" class="status">尚未啟動</div>
+  </section>
+  <section class="panel">
+    <div class="toolbar">
+      <button id="start">開啟相機</button>
+      <button id="switch" disabled>切換鏡頭</button>
+      <button id="capture" class="primary" disabled>拍照</button>
+      <button id="save" disabled>儲存</button>
+    </div>
+    <div class="section-title">自然美肌</div>
+    <div class="slider"><label>柔焦 <output id="softValue">35</output></label><input id="soft" type="range" min="0" max="100" value="35"></div>
+    <div class="slider"><label>膚色 <output id="toneValue">20</output></label><input id="tone" type="range" min="0" max="100" value="20"></div>
+    <div class="slider"><label>亮度 <output id="lightValue">12</output></label><input id="light" type="range" min="0" max="100" value="12"></div>
+    <div class="section-title">彩妝</div>
+    <div class="presets">
+      <button data-look="none" class="active">素顏</button>
+      <button data-look="natural">自然</button>
+      <button data-look="rose">玫瑰</button>
+      <button data-look="warm">暖色</button>
+    </div>
+    <div class="slider"><label>彩妝強度 <output id="makeupValue">0</output></label><input id="makeup" type="range" min="0" max="100" value="0"></div>
+    <button id="reset" class="reset">重設</button>
+  </section>
 </main>
 <script type="module" src="./app.js"></script>
 </body>
