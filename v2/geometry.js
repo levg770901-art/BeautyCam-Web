@@ -1,6 +1,7 @@
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 const maskCanvas=document.createElement("canvas");
-let maskCtx=null;
+const protectCanvas=document.createElement("canvas");
+let maskCtx=null,protectCtx=null;
 const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
 const EYES=[[33,160,158,133,153,144],[362,385,387,263,373,380]];
 const MOUTH=[61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95];
@@ -35,9 +36,9 @@ export function faceFromLandmarks(points,w,h,mirrored=false){if(!points?.length)
 export function landmarkMask(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;if(maskCanvas.width!==w||maskCanvas.height!==h){maskCanvas.width=w;maskCanvas.height=h}
 const x=maskCtx||(maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);const p=face.landmarks;x.fillStyle="#fff";if(!rasterPolygon(x,OVAL,p,w,h))return m;x.globalCompositeOperation="destination-out";for(const ids of [...EYES,MOUTH])rasterPolygon(x,ids,p,w,h);const d=x.getImageData(0,0,w,h).data;for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;return featherMask(m,w,h,1)}
 export function ellipseMask(w,h,face,feather=.08){return landmarkMask(w,h,face)}
-export function protectFeatures(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;const p=face.landmarks;
-if(maskCanvas.width!==w||maskCanvas.height!==h){maskCanvas.width=w;maskCanvas.height=h}
-const x=maskCtx||(maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);x.fillStyle="#fff";
+export function protectFeatures(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;
+if(protectCanvas.width!==w||protectCanvas.height!==h){protectCanvas.width=w;protectCanvas.height=h}
+const x=protectCtx||(protectCtx=protectCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);x.fillStyle="#fff";const p=face.landmarks;
 for(const ids of [...EYES,MOUTH,...BROWS])rasterPolygon(x,ids,p,w,h);
 const d=x.getImageData(0,0,w,h).data;for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;return featherMask(m,w,h,1)}
 export function smoothLandmarks(previous,current,alpha=.32){if(!current?.length)return previous||[];if(!previous?.length)return current;return current.map((p,i)=>{const q=previous[i]||p;return{x:q.x*(1-alpha)+p.x*alpha,y:q.y*(1-alpha)+p.y*alpha,z:(q.z??0)*(1-alpha)+(p.z??0)*alpha}})}
