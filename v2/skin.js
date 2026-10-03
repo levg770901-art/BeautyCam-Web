@@ -16,7 +16,7 @@ export function buildSkinMask(data,w,h,face,protect,maskW=w,maskH=h){
     for(let x=0;x<w;x++){
       const fx=Math.min(maskW-1,Math.floor(x*sx)),mi=row+fx,p=(y*w+x)*4;
       const base=face[mi]*skinProbability(data[p],data[p+1],data[p+2]);
-      m[y*w+x]=base*(1-protect[mi]*.96);
+      m[y*w+x]=base*(1-protect[mi]*.88);
     }
   }
   return m;
