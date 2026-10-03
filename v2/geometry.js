@@ -36,6 +36,17 @@ export function faceFromLandmarks(points,w,h,mirrored=false){if(!points?.length)
 export function landmarkMask(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;if(maskCanvas.width!==w||maskCanvas.height!==h){maskCanvas.width=w;maskCanvas.height=h}
 const x=maskCtx||(maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);const p=face.landmarks;x.fillStyle="#fff";if(!rasterPolygon(x,OVAL,p,w,h))return m;x.globalCompositeOperation="destination-out";for(const ids of [...EYES,MOUTH])rasterPolygon(x,ids,p,w,h);const d=x.getImageData(0,0,w,h).data;for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;return featherMask(m,w,h,1)}
 export function ellipseMask(w,h,face,feather=.08){return landmarkMask(w,h,face)}
+export function resizeMask(mask,w,h,nw,nh){
+  if(w===nw&&h===nh)return mask;
+  const out=new Float32Array(nw*nh),sx=w/nw,sy=h/nh;
+  for(let y=0;y<nh;y++){const fy=(y+.5)*sy-.5,y0=Math.max(0,Math.floor(fy)),y1=Math.min(h-1,y0+1),ty=Math.max(0,fy-y0);
+    for(let x=0;x<nw;x++){const fx=(x+.5)*sx-.5,x0=Math.max(0,Math.floor(fx)),x1=Math.min(w-1,x0+1),tx=Math.max(0,fx-x0);
+      const a=mask[y0*w+x0],b=mask[y0*w+x1],d=mask[y1*w+x0],e=mask[y1*w+x1];
+      out[y*nw+x]=a+(b-a)*tx+(d+(e-d)*tx-a-(b-a)*tx)*ty;
+    }
+  }
+  return out;
+}
 export function protectFeatures(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;
 if(protectCanvas.width!==w||protectCanvas.height!==h){protectCanvas.width=w;protectCanvas.height=h}
 const x=protectCtx||(protectCtx=protectCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);x.fillStyle="#fff";const p=face.landmarks;
