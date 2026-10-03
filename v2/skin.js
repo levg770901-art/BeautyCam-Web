@@ -38,9 +38,9 @@ export function detailPreservingSmooth(data,w,h,radius=2){
     const baseLum=.2126*base[i]+.7152*base[i+1]+.0722*base[i+2];
     const detail=lum-baseLum;
     const preserve=clamp(1-Math.abs(detail)/34,.18,.72);
-    out[i]=clamp(base[i]+(data[i]-base[i])*preserve);
-    out[i+1]=clamp(base[i+1]+(data[i+1]-base[i+1])*preserve);
-    out[i+2]=clamp(base[i+2]+(data[i+2]-base[i+2])*preserve);
+    out[i]=base[i]+(data[i]-base[i])*preserve;
+    out[i+1]=base[i+1]+(data[i+1]-base[i+1])*preserve;
+    out[i+2]=base[i+2]+(data[i+2]-base[i+2])*preserve;
     out[i+3]=data[i+3];
   }
   return out;
