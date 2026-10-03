@@ -8,14 +8,23 @@ const BROWS=[[70,63,105,66,107],[336,296,334,293,300]];
 function rasterPolygon(ctx,ids,p,w,h){const q=ids.map(i=>p[i]?[p[i].x*w,p[i].y*h]:null).filter(Boolean);if(q.length<3)return false;ctx.beginPath();ctx.moveTo(q[0][0],q[0][1]);for(let i=1;i<q.length;i++)ctx.lineTo(q[i][0],q[i][1]);ctx.closePath();ctx.fill();return true}
 function featherMask(mask,w,h,passes=1){
   if(passes<1)return mask;
-  const out=new Float32Array(mask),tmp=new Float32Array(mask);
+  const out=new Float32Array(mask.length);
+  const tmp=new Float32Array(mask.length);
+  const stride=w;
   for(let pass=0;pass<passes;pass++){
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const i=y*w+x;
-      let sum=mask[i]*4,count=4;
-      if(x>0){sum+=mask[i-1];count++} if(x<w-1){sum+=mask[i+1];count++}
-      if(y>0){sum+=mask[i-w];count++} if(y<h-1){sum+=mask[i+w];count++}
-      tmp[i]=sum/count;
+    for(let y=0;y<h;y++){
+      const row=y*stride;
+      const up=y>0?row-stride:row,down=y<h-1?row+stride:row;
+      for(let x=0;x<w;x++){
+        const i=row+x;
+        let sum=mask[i]*4;
+        let count=4;
+        if(x>0){sum+=mask[i-1];count++}
+        if(x<w-1){sum+=mask[i+1];count++}
+        if(y>0){sum+=mask[up+x];count++}
+        if(y<h-1){sum+=mask[down+x];count++}
+        tmp[i]=sum/count;
+      }
     }
     out.set(tmp);
     mask=tmp;
