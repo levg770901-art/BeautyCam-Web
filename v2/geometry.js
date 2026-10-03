@@ -1,21 +1,5 @@
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
-export function estimateFaceRegion(w,h,box=null){
-if(box){const cx=box.x+box.width*.5,cy=box.y+box.height*.48;return{x:cx,y:cy,rx:box.width*.46,ry:box.height*.50}}
-return{x:w*.5,y:h*.48,rx:w*.31,ry:h*.40};
-}
-export function ellipseMask(w,h,face,feather=0.045){
-const m=new Float32Array(w*h),fx=face.rx,fy=face.ry;
-for(let y=0;y<h;y++){const dy=(y-face.y)/fy;for(let x=0;x<w;x++){const dx=(x-face.x)/fx;const d=Math.sqrt(dx*dx+dy*dy);const edge=1-feather;let a=clamp((1-d)/(1-edge));if(d>1)a=0;m[y*w+x]=a}}
-return m;
-}
-export function protectFeatures(w,h,face){
-const m=new Float32Array(w*h);const ex=face.rx*.28,ey=face.ry*.13;
-const eyesY=face.y-face.ry*.12,eyeX=face.rx*.34;
-const mouthY=face.y+face.ry*.30,mouthX=face.rx*.27;
-for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-const le=((x-(face.x-eyeX))/ex)**2+((y-eyesY)/ey)**2;
-const re=((x-(face.x+eyeX))/ex)**2+((y-eyesY)/ey)**2;
-const mo=((x-face.x)/mouthX)**2+((y-mouthY)/(face.ry*.12))**2;
-m[y*w+x]=Math.max(le<1?1:0,re<1?1:0,mo<1?1:0)}
-return m;
-}
+export function faceFromLandmarks(points,w,h){if(!points?.length)return null;let minX=1,maxX=0,minY=1,maxY=0;for(const p of points){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y)}const cx=(minX+maxX)/2,cy=minY+(maxY-minY)*.49;return{x:cx*w,y:cy*h,rx:(maxX-minX)*w*.54,ry:(maxY-minY)*h*.56,landmarks:points}}
+export function ellipseMask(w,h,face,feather=.08){const m=new Float32Array(w*h);if(!face)return m;for(let y=0;y<h;y++){const dy=(y-face.y)/face.ry;for(let x=0;x<w;x++){const dx=(x-face.x)/face.rx,d=Math.sqrt(dx*dx+dy*dy),edge=1-feather;m[y*w+x]=d<=edge?1:d<1?clamp((1-d)/feather):0}}return m}
+export function protectFeatures(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;const p=face.landmarks,pt=i=>p[i]?{x:p[i].x*w,y:p[i].y*h}:null;const groups=[[33,160,158,133,153,144],[362,385,387,263,373,380],[61,291,0,17,13,14]];for(const ids of groups){const q=ids.map(pt).filter(Boolean);if(q.length<3)continue;let minX=w,maxX=0,minY=h,maxY=0;for(const a of q){minX=Math.min(minX,a.x);maxX=Math.max(maxX,a.x);minY=Math.min(minY,a.y);maxY=Math.max(maxY,a.y)}const cx=(minX+maxX)/2,cy=(minY+maxY)/2,rx=(maxX-minX)*.72,ry=(maxY-minY)*.9;for(let y=Math.max(0,Math.floor(minY-ry));y<Math.min(h,Math.ceil(maxY+ry));y++)for(let x=Math.max(0,Math.floor(minX-rx));x<Math.min(w,Math.ceil(maxX+rx));x++)if(((x-cx)/rx)**2+((y-cy)/ry)**2<1)m[y*w+x]=1}return m}
+export function smoothLandmarks(previous,current,alpha=.32){if(!current?.length)return previous||[];if(!previous?.length)return current;return current.map((p,i)=>{const q=previous[i]||p;return{x:q.x*(1-alpha)+p.x*alpha,y:q.y*(1-alpha)+p.y*alpha,z:(q.z??0)*(1-alpha)+(p.z??0)*alpha}})}
