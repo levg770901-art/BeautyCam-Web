@@ -1,35 +1,19 @@
-import {CameraEngine} from "./camera.js";
-import {LandmarkProvider} from "./landmarks.js";
-import {faceFromLandmarks,faceRegionMask,softSkinWeight,smoothLandmarks} from "./geometry.js";
-import {buildSkinMask} from "./skin.js";
-import {processBeauty} from "./beauty.js";
-import {Renderer} from "./renderer.js";
-import {renderMakeup} from "./makeup.js";
-const $=id=>document.getElementById(id),video=$("video"),canvas=$("canvas"),status=$("status"),placeholder=$("placeholder");
-const camera=new CameraEngine(video),landmarks=new LandmarkProvider(),renderer=new Renderer(canvas);
-const perf={frames:0,last:performance.now(),fps:0,detectMs:0,renderMs:0};
-const controls={smooth:$("smooth"),soften:$("soften"),whiten:$("whiten"),makeup:$("makeup")};
-let makeupStyle="natural";
-let running=false,captureMode=false,last=0,raf=0,stable=[],expression=[],transformationMatrix=null,providerReady=false,detectBusy=false,liveMax=720,qualityTimer=0;
-const setStatus=t=>status.textContent=t;
-const settings=()=>({smooth:+controls.smooth.value,soften:+controls.soften.value,whiten:+controls.whiten.value});
-const maskSize=(w,h)=>{const max=360,s=Math.min(1,max/Math.max(w,h));return[Math.max(1,Math.round(w*s)),Math.max(1,Math.round(h*s))]};
-const updateLabels=()=>Object.keys(controls).forEach(k=>$(k+"Value").textContent=controls[k].value);
-const sizeFor=max=>{const s=Math.min(1,max/Math.max(video.videoWidth,video.videoHeight));return[Math.max(1,Math.round(video.videoWidth*s)),Math.max(1,Math.round(video.videoHeight*s))]};
-async function detect(){if(detectBusy)return stable;detectBusy=true;const t=performance.now();try{const result=await landmarks.detect(video);stable=smoothLandmarks(stable,result.landmarks,.28);expression=result.blendshapes||[];transformationMatrix=result.transformationMatrix||null}finally{perf.detectMs=performance.now()-t;detectBusy=false}return stable}
-async function render(max=720,doDetect=true){if(!video.videoWidth)return;const t=performance.now();const[w,h]=sizeFor(max);renderer.resize(w,h);renderer.draw(video,camera.mirrored);const raw=renderer.frame();const pts=doDetect?await detect():stable;const face=faceFromLandmarks(pts,w,h,camera.mirrored);if(!face){renderer.put(raw);setStatus("V2.0 · 尋找臉部…");return}const [mw,mh]=maskSize(w,h);
-const faceMask=faceRegionMask(mw,mh,face);
-const protectMask=softSkinWeight(mw,mh,face);
-const skin=buildSkinMask(raw.data,w,h,faceMask,protectMask,mw,mh);
-renderer.put(new ImageData(processBeauty(raw.data,w,h,skin,settings(),{preview:max<1000}),w,h));
-renderMakeup(renderer.ctx,face?[face.landmarks]:[],w,h,{amount:+controls.makeup.value,style:makeupStyle,expression,transformationMatrix});perf.renderMs=performance.now()-t;perf.frames++;if(performance.now()-perf.last>1000){perf.fps=perf.frames*1000/(performance.now()-perf.last);perf.frames=0;perf.last=performance.now()}setStatus(`V2.0 · 478 landmarks · 美肌 ${controls.smooth.value}% · 磨皮 ${controls.soften.value}% · 美白 ${controls.whiten.value}%`)}
-async function loop(t){if(!running)return;raf=requestAnimationFrame(loop);if(t-last<80)return;last=t;await render(liveMax,true);
-if(t-qualityTimer>2500){qualityTimer=t;if(perf.fps&&perf.fps<9&&liveMax>540)liveMax=540;else if(perf.fps>14&&perf.renderMs<48&&liveMax<720)liveMax=720}}
-async function start(){try{await camera.start();running=true;captureMode=false;canvas.style.display="block";video.style.display="none";placeholder.style.display="none";$("capture").disabled=false;$("switch").disabled=false;$("save").disabled=true;liveMax=720;$("start").textContent=camera.facing==="user"?"前鏡頭已開啟":"後鏡頭已開啟";if(!providerReady){setStatus("V2.0 · 初始化 GPU 臉部追蹤…");providerReady=await landmarks.init()}if(!providerReady){setStatus("GPU 臉部追蹤初始化失敗："+(landmarks.error?.message||"未知錯誤"));return}setStatus("V2.0 · 478 landmarks 已啟動");raf=requestAnimationFrame(loop)}catch(e){setStatus("相機開啟失敗："+(e?.message||e));running=false}}
-async function switchCamera(){camera.switch();landmarks.reset();stable=[];expression=[];transformationMatrix=null;await start()}
-async function capture(){if(!running)return;cancelAnimationFrame(raf);await render(1600,true);running=false;captureMode=true;$("save").disabled=false;$("capture").disabled=true;$("switch").disabled=true;$("start").textContent="重新開啟前鏡頭";camera.stop();setStatus("V2.0 · 已完成高解析度處理")}
-async function save(){const blob=await new Promise(r=>canvas.toBlob(r,"image/jpeg",.94));if(!blob)return;const file=new File([blob],`BeautyCam-V2-${Date.now()}.jpg`,{type:"image/jpeg"});if(navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e?.name==="AbortError")return}}const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-function reset(){cancelAnimationFrame(raf);running=false;captureMode=false;camera.stop();landmarks.reset();stable=[];expression=[];transformationMatrix=null;canvas.style.display="none";video.style.display="none";placeholder.style.display="grid";$("capture").disabled=true;$("switch").disabled=true;$("save").disabled=true;$("start").textContent="開啟前鏡頭";setStatus("V2.0 Core 尚未啟動")}
-$("start").onclick=start;$("switch").onclick=switchCamera;$("capture").onclick=capture;$("save").onclick=save;$("reset").onclick=reset;
-Object.values(controls).forEach(x=>x.addEventListener("input",()=>{updateLabels();if(captureMode)render(1600,false)}));updateLabels();
-for(const b of document.querySelectorAll("[data-style]"))b.onclick=()=>{makeupStyle=b.dataset.style;document.querySelectorAll("[data-style]").forEach(x=>x.classList.toggle("active",x===b));if(captureMode)render(1600,false)};
+import {FaceVision} from "./vision.js";
+import {stabilize,faceBox,blend} from "./face.js";
+import {masks,beauty,makeup} from "./effects.js";
+const video=document.querySelector("#camera"),canvas=document.querySelector("#output"),ctx=canvas.getContext("2d",{willReadFrequently:true}),status=document.querySelector("#status"),hint=document.querySelector("#hint");
+const vision=new FaceVision();let stream=null,facing="user",running=false,frame=0,lastTime=0,points=[],expression=[],matrix=null,look="none",captured=false;
+const $=id=>document.getElementById(id),settings=()=>({soft:+$("soft").value,tone:+$("tone").value,light:+$("light").value});
+function setStatus(t){status.textContent=t}
+function size(max){const s=Math.min(1,max/Math.max(video.videoWidth,video.videoHeight));return[Math.max(1,Math.round(video.videoWidth*s)),Math.max(1,Math.round(video.videoHeight*s))]}
+async function start(){try{stop();stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1280},height:{ideal:960},frameRate:{ideal:30,max:30}}});video.srcObject=stream;await video.play();await vision.init();running=true;captured=false;$("start").disabled=true;$("switch").disabled=false;$("capture").disabled=false;$("save").disabled=true;hint.style.display="none";video.style.display="block";canvas.style.display="block";setStatus("V2.0 · Face Landmarker 已啟動");requestAnimationFrame(loop)}catch(e){setStatus("啟動失敗："+(e?.message||e))}}
+function stop(){running=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}video.srcObject=null}
+function drawFrame(max=720,detect=true){const [w,h]=size(max);canvas.width=w;canvas.height=h;ctx.save();if(facing==="user"){ctx.translate(w,0);ctx.scale(-1,1)}ctx.drawImage(video,0,0,w,h);ctx.restore();if(detect){const r=vision.detect(video);points=stabilize(points,r?.landmarks,.32);expression=r?.blendshapes||[];matrix=r?.matrix||null}if(!points.length){setStatus("V2.0 · 等待臉部");return}const data=ctx.getImageData(0,0,w,h);const m=masks(w,h,points);const out=beauty(data.data,w,h,m.face,m.protect,settings());ctx.putImageData(new ImageData(out,w,h),0,0);makeup(ctx,points,w,h,+$("makeup").value,look,expression)}
+function loop(t){if(!running)return;if(t-lastTime>55){lastTime=t;drawFrame(720,true);frame++}requestAnimationFrame(loop)}
+async function capture(){if(!running)return;drawFrame(1600,true);running=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}video.srcObject=null;captured=true;$("capture").disabled=true;$("save").disabled=false;$("start").disabled=false;setStatus("V2.0 · 高解析度影像完成")}
+async function save(){if(!captured)return;const blob=await new Promise(r=>canvas.toBlob(r,"image/jpeg",.95));if(!blob)return;const file=new File([blob],`BeautyCam-V2-${Date.now()}.jpg`,{type:"image/jpeg"});if(navigator.share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==="AbortError")return}}const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function switchCam(){facing=facing==="user"?"environment":"user";points=[];expression=[];vision.reset();start()}
+function reset(){stop();points=[];expression=[];matrix=null;captured=false;canvas.style.display="none";video.style.display="none";hint.style.display="grid";$("start").disabled=false;$("switch").disabled=true;$("capture").disabled=true;$("save").disabled=true;setStatus("尚未啟動")}
+$("start").onclick=start;$("switch").onclick=switchCam;$("capture").onclick=capture;$("save").onclick=save;$("reset").onclick=reset;
+for(const id of ["soft","tone","light","makeup"]){$(id).oninput=()=>$(id+"Value").textContent=$(id).value}
+document.querySelectorAll("[data-look]").forEach(b=>b.onclick=()=>{look=b.dataset.look;document.querySelectorAll("[data-look]").forEach(x=>x.classList.toggle("active",x===b));if(look==="none")$("makeup").value=0;else if(+$("makeup").value<35)$("makeup").value=35;$("makeupValue").textContent=$("makeup").value});
