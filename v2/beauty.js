@@ -1,9 +1,9 @@
-import {blurRGBA} from "./skin.js";
+import {detailPreservingSmooth} from "./skin.js";
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
 export function processBeauty(data,w,h,mask,settings){
   const smooth=settings.smooth/100,soften=settings.soften/100,whiten=settings.whiten/100;
   const radius=.8+smooth*1.1+soften*1.4;
-  const soft=radius>1?blurRGBA(data,w,h,radius):data;
+  const soft=radius>1?detailPreservingSmooth(data,w,h,radius):data;
   const out=new Uint8ClampedArray(data);
   for(let i=0,p=0;i<mask.length;i++,p+=4){
     const m=mask[i];
