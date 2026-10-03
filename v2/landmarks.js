@@ -16,8 +16,8 @@ export class LandmarkProvider{
         minFaceDetectionConfidence:.5,
         minFacePresenceConfidence:.5,
         minTrackingConfidence:.5,
-        outputFaceBlendshapes:false,
-        outputFacialTransformationMatrixes:false
+        outputFaceBlendshapes:true,
+        outputFacialTransformationMatrixes:true
       };
       try{
         this.landmarker=await FaceLandmarker.createFromOptions(vision,options);
@@ -35,15 +35,19 @@ export class LandmarkProvider{
     }
   }
   async detect(source){
-    if(!this.ready||!this.landmarker)return[];
+    if(!this.ready||!this.landmarker)return{landmarks:[],blendshapes:[],transformationMatrix:null};
     try{
       const timestamp=Math.max(performance.now(),this.lastTimestamp+1);
       this.lastTimestamp=timestamp;
       const result=this.landmarker.detectForVideo(source,timestamp);
-      return result.faceLandmarks?.[0]||[];
+      return{
+        landmarks:result.faceLandmarks?.[0]||[],
+        blendshapes:result.faceBlendshapes?.[0]?.categories||[],
+        transformationMatrix:result.facialTransformationMatrixes?.[0]||null
+      };
     }catch(e){
       this.error=e;
-      return[];
+      return{landmarks:[],blendshapes:[],transformationMatrix:null};
     }
   }
   reset(){this.lastTimestamp=-1}
