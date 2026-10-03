@@ -21,7 +21,7 @@ async function render(max=720,doDetect=true){if(!video.videoWidth)return;const t
 const faceMask=landmarkMask(mw,mh,face);
 const protectMask=protectFeatures(mw,mh,face);
 const skin=buildSkinMask(raw.data,w,h,faceMask,protectMask,mw,mh);
-renderer.put(new ImageData(processBeauty(raw.data,w,h,skin,settings()),w,h));
+renderer.put(new ImageData(processBeauty(raw.data,w,h,skin,settings(),{preview:max<1000}),w,h));
 renderMakeup(renderer.ctx,face?[face.landmarks]:[],w,h,{amount:+controls.makeup.value,style:makeupStyle});perf.renderMs=performance.now()-t;perf.frames++;if(performance.now()-perf.last>1000){perf.fps=perf.frames*1000/(performance.now()-perf.last);perf.frames=0;perf.last=performance.now()}setStatus(`V2.0 · 478 landmarks · 美肌 ${controls.smooth.value}% · 磨皮 ${controls.soften.value}% · 美白 ${controls.whiten.value}%`)}
 async function loop(t){if(!running)return;raf=requestAnimationFrame(loop);if(t-last<80)return;last=t;await render(liveMax,true);
 if(t-qualityTimer>2500){qualityTimer=t;if(perf.fps&&perf.fps<9&&liveMax>540)liveMax=540;else if(perf.fps>14&&perf.renderMs<48&&liveMax<720)liveMax=720}}
