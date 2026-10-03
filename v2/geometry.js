@@ -34,7 +34,7 @@ function featherMask(mask,w,h,passes=1){
 }
 export function faceFromLandmarks(points,w,h,mirrored=false){if(!points?.length)return null;const pts=points.map(p=>({x:mirrored?1-p.x:p.x,y:p.y,z:p.z}));let minX=1,maxX=0,minY=1,maxY=0;for(const p of pts){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y)}return{x:(minX+maxX)*.5*w,y:(minY+(maxY-minY)*.49)*h,rx:(maxX-minX)*w*.54,ry:(maxY-minY)*h*.56,landmarks:pts}}
 export function landmarkMask(w,h,face){const m=new Float32Array(w*h);if(!face?.landmarks)return m;if(maskCanvas.width!==w||maskCanvas.height!==h){maskCanvas.width=w;maskCanvas.height=h}
-const x=maskCtx||(maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);const p=face.landmarks;x.fillStyle="#fff";if(!rasterPolygon(x,OVAL,p,w,h))return m;x.globalCompositeOperation="destination-out";for(const ids of [...EYES,MOUTH])rasterPolygon(x,ids,p,w,h);const d=x.getImageData(0,0,w,h).data;for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;return featherMask(m,w,h,1)}
+const x=maskCtx||(maskCtx=maskCanvas.getContext("2d",{willReadFrequently:true}));x.clearRect(0,0,w,h);const p=face.landmarks;x.fillStyle="#fff";if(!rasterPolygon(x,OVAL,p,w,h))return m;x.filter="blur(1.5px)";x.globalCompositeOperation="destination-out";for(const ids of [...EYES,MOUTH])rasterPolygon(x,ids,p,w,h);x.filter="none";const d=x.getImageData(0,0,w,h).data;for(let i=0;i<m.length;i++)m[i]=d[i*4]/255;return m}
 export function ellipseMask(w,h,face,feather=.08){return landmarkMask(w,h,face)}
 export function resizeMask(mask,w,h,nw,nh){
   if(w===nw&&h===nh)return mask;
