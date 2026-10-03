@@ -1,13 +1,14 @@
 import {detailPreservingSmooth} from "./skin.js";
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
-export function processBeauty(data,w,h,mask,settings){
+export function processBeauty(data,w,h,mask,settings,{preview=false}={}){
+
   const smooth=settings.smooth/100,soften=settings.soften/100,whiten=settings.whiten/100;
-  const radius=.8+smooth*1.1+soften*1.4;
+  const radius=.8+smooth*1.1+soften*1.4*(preview?.72:1);
   const soft=radius>1?detailPreservingSmooth(data,w,h,radius):data;
   const out=new Uint8ClampedArray(data);
   for(let i=0,p=0;i<mask.length;i++,p+=4){
     const m=mask[i];
-    const a=clamp(m*(.12+smooth*.34+soften*.32),0,.68);
+    const a=clamp(m*(.10+smooth*.31+soften*.29),0,.64);
     if(a>0){
       out[p]=data[p]+(soft[p]-data[p])*a;
       out[p+1]=data[p+1]+(soft[p+1]-data[p+1])*a;
